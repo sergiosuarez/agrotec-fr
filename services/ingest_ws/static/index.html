@@ -1,0 +1,5227 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>GIS Realtime Viewer - v2.1</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mapbox-gl-draw/1.4.3/mapbox-gl-draw.css" />
+  <style>
+    body,
+    html,
+    #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    #map {
+      position: relative;
+    }
+
+    #left-controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 5;
+      max-width: 340px;
+    }
+
+    #panel {
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.85));
+      backdrop-filter: blur(8px);
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      color: #f8fafc;
+      font-size: 13px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+
+    .green {
+      background: #22c55e
+    }
+
+    .yellow {
+      background: #fbbf24
+    }
+
+    .red {
+      background: #ef4444
+    }
+
+    .gray {
+      background: #94a3b8
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: 0.2;
+      }
+    }
+
+    .blink-red {
+      background: #ef4444;
+      animation: blink 1s infinite;
+    }
+
+    #session-info,
+    #info {
+      display: none;
+      color: #f8fafc;
+    }
+
+    #session-info span,
+    #info {
+      color: #e2e8f0;
+      font-size: 12px;
+    }
+
+    .panel-section {
+      background: rgba(241, 245, 249, 0.5);
+      background: rgba(241, 245, 249, 0.08);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+
+    .panel-section summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      color: #f1f5f9;
+      user-select: none;
+      padding: 6px 8px;
+      border-radius: 6px;
+      transition: background .15s;
+    }
+
+    .panel-section summary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .panel-section summary::marker {
+      display: none;
+    }
+
+    .panel-section[open] summary {
+      border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+    }
+
+    .layer-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      color: #e2e8f0;
+    }
+
+    .basemap-option,
+    .layer-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      transition: background .15s;
+    }
+
+    .basemap-option {
+      justify-content: flex-start;
+      gap: 10px;
+    }
+
+    .basemap-option:hover,
+    .layer-toggle:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .basemap-option input[type="radio"] {
+      accent-color: #2563eb;
+    }
+
+    .layer-toggle input[type="checkbox"] {
+      accent-color: #2563eb;
+    }
+
+    .layer-toggle .title {
+      flex: 1;
+    }
+
+    .layer-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+
+    .layer-badge.live {
+      background: #dc2626;
+      color: #fff;
+    }
+
+    .layer-badge.seeded {
+      background: #334155;
+      color: #fff;
+    }
+
+    .empty-text {
+      font-size: 12px;
+      color: #6b7280;
+      font-style: italic;
+      padding: 4px 2px;
+    }
+
+    /* Full-screen Photo Modal */
+    #photo-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.95);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      user-select: none;
+    }
+
+    #photo-modal-content {
+      position: relative;
+      max-width: 90%;
+      max-height: 90%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    #photo-modal-img {
+      max-width: 100%;
+      max-height: 85vh;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    #photo-modal-label {
+      color: #f8fafc;
+      font-size: 16px;
+      font-weight: 600;
+      background: rgba(30, 41, 59, 0.8);
+      padding: 6px 16px;
+      border-radius: 20px;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: none;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 24px;
+      transition: all 0.2s;
+      z-index: 10000;
+    }
+
+    .modal-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    .modal-btn.prev {
+      left: -60px;
+    }
+
+    .modal-btn.next {
+      right: -60px;
+    }
+
+    #photo-modal-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      color: white;
+      font-size: 32px;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    #photo-modal-close:hover {
+      opacity: 1;
+    }
+
+    @media (max-width: 768px) {
+      .modal-btn.prev {
+        left: 10px;
+      }
+
+      .modal-btn.next {
+        right: 10px;
+      }
+
+      #photo-modal-label {
+        font-size: 14px;
+      }
+    }
+
+    #toolbar {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.88));
+      backdrop-filter: blur(8px);
+      padding: 10px 14px;
+      border-radius: 14px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.22);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 5;
+    }
+
+    #toolbar .button-column {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tool-btn {
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      background: #f8fafc;
+      color: #1f2937;
+      border-radius: 10px;
+      height: 44px;
+      width: 44px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s, transform .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tool-btn span {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .tool-btn:hover {
+      background: #e2e8f0;
+    }
+
+    .tool-btn.active {
+      background: #2563eb;
+      border-color: #1d4ed8;
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    #coords-tooltip {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      font-size: 12px;
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(4px);
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      margin-top: 8px;
+      /* Fix text overflow */
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      box-sizing: border-box;
+    }
+
+    #wms-legend-container {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      /* Totally in the corner */
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 20;
+      pointer-events: none;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .floating-legend-item {
+      background: rgba(15, 23, 42, 0.9);
+      padding: 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      /* Align content to right */
+    }
+
+    #coords-tooltip .measure-lines {
+      font-size: 12px;
+      line-height: 1.35;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    #coords-tooltip .measure-entry {
+      color: #94a3b8;
+    }
+
+    .basemap-option input:checked+label {
+      color: #60a5fa;
+      font-weight: 600;
+    }
+
+    #coords-tooltip .measure-entry strong {
+      color: #f8fafc;
+      font-weight: 600;
+      display: inline-block;
+      min-width: 82px;
+    }
+
+    #coords-tooltip .measure-empty {
+      color: #64748b;
+      font-style: italic;
+    }
+
+    .measure-label {
+      background: rgba(15, 23, 42, 0.88);
+      color: #f8fafc;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.2;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+      pointer-events: none;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .heading-arrow {
+      display: inline-block;
+      transform-origin: center center;
+    }
+
+    .kv-grid {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr);
+      gap: 4px 12px;
+      font-size: 13px;
+    }
+
+    .kv-grid dt {
+      font-weight: 600;
+      margin: 0;
+      color: #1f2937;
+    }
+
+    .kv-grid dd {
+      margin: 0;
+      color: #374151;
+    }
+
+    .kv-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .kv-table th,
+    .kv-table td {
+      border: 1px solid #e5e7eb;
+      padding: 4px 6px;
+      text-align: left;
+    }
+
+    .kv-table th {
+      background: #f3f4f6;
+      font-weight: 600;
+    }
+
+    .kv-empty {
+      font-size: 13px;
+      color: #6b7280;
+      font-style: italic;
+      margin: 6px 0;
+    }
+
+    /* Bottom panel */
+    :root {
+      --bottom-panel-height: 38%;
+      --bottom-panel-h-padding: 10%;
+    }
+
+    #bottom-panel {
+      position: absolute;
+      left: var(--bottom-panel-h-padding);
+      right: var(--bottom-panel-h-padding);
+      bottom: 12px;
+      height: var(--bottom-panel-height);
+      background: rgba(255, 255, 255, 0.98);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 6;
+    }
+
+    #bottom-panel.hidden {
+      display: none;
+    }
+
+    .bottom-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+      background: linear-gradient(90deg, #0f172a, #1e293b);
+      color: #f8fafc;
+    }
+
+    .bottom-panel-header .tabs {
+      display: flex;
+      flex: 1;
+      background: rgba(15, 23, 42, 0.4);
+      padding: 4px;
+      border-radius: 8px;
+      gap: 4px;
+    }
+
+    .bottom-panel-header .tab-btn.bottom {
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      flex: 1;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .bottom-panel-header .tab-btn.bottom:hover {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .bottom-panel-header .tab-btn.bottom.active {
+      background: #38bdf8;
+      color: #0f172a;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      font-weight: 600;
+    }
+
+    .bottom-panel-header .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      justify-content: flex-end;
+    }
+
+    #bottom-search {
+      min-width: 200px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      font-size: 13px;
+    }
+
+    .icon-btn {
+      border: none;
+      background: rgba(255, 255, 255, 0.15);
+      color: #f8fafc;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .bottom-panel-body {
+      flex: 1;
+      overflow: hidden;
+      background: #f8fafc;
+    }
+
+    .bottom-tab {
+      height: 100%;
+      overflow: auto;
+      display: none;
+      padding: 10px 12px;
+    }
+
+    .bottom-tab.active {
+      display: block;
+    }
+
+    .table-container {
+      overflow: auto;
+      max-height: 100%;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: separate;
+      /* Required for border-radius on rows */
+      border-spacing: 0 4px;
+      /* Gap between floating rows */
+      font-size: 13px;
+    }
+
+    table.data-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    table.data-table thead tr {
+      background: transparent;
+      box-shadow: none;
+    }
+
+    table.data-table th {
+      padding: 10px 14px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      background: #f1f5f9;
+      border: none;
+    }
+
+    table.data-table tbody tr {
+      background: #ffffff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+
+    table.data-table tbody tr:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      background: #ffffff;
+      /* Keep white on hover */
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    table.data-table td {
+      padding: 12px 14px;
+      border: none;
+      border-top: 1px solid transparent;
+      border-bottom: 1px solid transparent;
+      white-space: nowrap;
+      color: #334155;
+    }
+
+    /* Rounded corners for the row */
+    table.data-table tbody tr td:first-child {
+      border-top-left-radius: 8px;
+      border-bottom-left-radius: 8px;
+    }
+
+    table.data-table tbody tr td:last-child {
+      border-top-right-radius: 8px;
+      border-bottom-right-radius: 8px;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    #bottom-toggle {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: none;
+      background: #0f172a;
+      color: #f8fafc;
+      border-radius: 12px;
+      padding: 10px 14px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.35);
+      cursor: pointer;
+      z-index: 6;
+    }
+
+    #bottom-toggle.over-panel {
+      bottom: calc(var(--bottom-panel-height) + 18px);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .badge.critico {
+      background: #ef4444;
+    }
+
+    .badge.medio {
+      background: #f97316;
+    }
+
+    .badge.otro {
+      background: #6366f1;
+    }
+
+    .link-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      color: #0ea5e9;
+      cursor: pointer;
+      text-decoration: underline;
+      font: inherit;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .ficha-layout {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      gap: 12px;
+      height: 100%;
+    }
+
+    .ficha-detail {
+      display: flex;
+      flex-direction: row;
+      gap: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .vessel-tabs {
+      display: flex;
+      flex-direction: column;
+      flex-wrap: nowrap;
+      width: 140px;
+      min-width: 140px;
+      gap: 4px;
+      padding: 10px 8px;
+      overflow-y: auto;
+      border-right: 1px solid #e2e8f0;
+      border-bottom: none;
+      margin-bottom: 0;
+      background: #f8fafc;
+    }
+
+    .vessel-tab {
+      border: none;
+      background: transparent;
+      color: #64748b;
+      border-radius: 6px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: normal;
+      text-align: left;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .vessel-tab:hover {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+
+    .vessel-tab.active {
+      background: #fff;
+      color: #0ea5e9;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      border-left: 3px solid #0ea5e9;
+      border-radius: 4px 6px 6px 4px;
+    }
+
+    .ficha-empty {
+      display: none !important;
+    }
+
+    #alerts-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 360px;
+      max-height: 80vh;
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.96);
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      padding: 12px;
+      z-index: 5;
+      display: none;
+    }
+
+    #alerts-panel.active {
+      display: block;
+    }
+
+    #alerts-panel h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    #alerts-panel .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    #close-alerts-panel {
+      border: none;
+      background: transparent;
+      font-size: 18px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 6px;
+    }
+
+    .alert-item {
+      background: rgba(241, 245, 249, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    .alert-item .alert-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: #1e293b;
+      margin-bottom: 4px;
+    }
+
+    .alert-item .alert-meta {
+      font-size: 12px;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+    }
+
+    .alert-item .alert-description {
+      font-size: 13px;
+      color: #374151;
+      margin-top: 6px;
+    }
+
+    .info-grid {
+      display: grid !important;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+      gap: 12px !important;
+      padding-bottom: 12px;
+    }
+
+    .info-block {
+      background: #ffffff !important;
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 10px !important;
+      padding: 14px !important;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+      display: block !important;
+    }
+
+    .info-block:hover {
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+      transform: translateY(-1px);
+    }
+
+    /* Certificates */
+    .cert-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .cert-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #3b82f6;
+      /* Default Blue */
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .cert-card.expired {
+      border-left-color: #ef4444;
+    }
+
+    .cert-card.valid {
+      border-left-color: #22c55e;
+    }
+
+    .cert-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: #1e293b;
+    }
+
+    .cert-meta {
+      font-size: 12px;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Contact Card (Owner/Armador) */
+    .contact-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .info-block-header {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #0ea5e9;
+      /* Accent color for headers */
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #e0f2fe;
+      /* Light blue underline */
+    }
+
+    .info-block-value {
+      font-size: 16px;
+      /* Larger value */
+      color: #0f172a;
+      font-weight: 700;
+      /* Bolder */
+      word-break: break-word;
+      line-height: 1.3;
+    }
+
+    .contact-avatar {
+      width: 48px;
+      height: 48px;
+      background: #e2e8f0;
+      border-radius: 50%;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .contact-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+
+    .contact-details {
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.5;
+    }
+
+    /* Engine Card */
+    .engine-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .engine-header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .ficha-2col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .ficha-2col {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+      align-items: center;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      color: #0ea5e9;
+      /* Blue accent like headers */
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.03em;
+    }
+
+    .info-val {
+      font-weight: 700;
+      /* Bolder */
+      font-size: 15px;
+      /* Larger */
+      color: #0f172a;
+      text-align: right;
+    }
+
+    /* General Clean Table (Light) */
+    .clean-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .clean-table th {
+      text-align: left;
+      color: #0ea5e9;
+      /* Blue accent */
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      padding: 10px 12px;
+      border-bottom: 2px solid #e0f2fe;
+      background: #f8fafc;
+    }
+
+    .clean-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+      font-weight: 500;
+    }
+
+    .clean-table tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    .clean-table tbody tr:hover {
+      background: #e0f2fe;
+    }
+
+    .clean-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .alerts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      padding: 4px;
+    }
+
+    .alert-card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+    }
+
+    .alert-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+      border-color: #cbd5e1;
+    }
+
+    .alert-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .alert-vessel-name {
+      font-weight: 700;
+      color: #0f172a;
+      font-size: 14px;
+    }
+
+    .alert-time {
+      font-size: 11px;
+      color: #64748b;
+      white-space: nowrap;
+    }
+
+    .alert-body {
+      font-size: 13px;
+      color: #334155;
+      line-height: 1.4;
+    }
+
+    .alert-footer {
+      margin-top: auto;
+      padding-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+      border-top: 1px solid #f1f5f9;
+    }
+
+    .alert-action-btn {
+      background: #f1f5f9;
+      color: #475569;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .alert-action-btn:hover {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+
+    #divider {
+      border: 0;
+
+      border-top: 1px solid #eee;
+      margin: 10px 0;
+    }
+
+    .info-layout {
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+    }
+
+    .tab-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 120px;
+      max-height: 70vh;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+
+    .tab-btn {
+      border: 1px solid #ddd;
+      background: #f6f6f6;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      text-align: left;
+      transition: background .15s, border-color .15s;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      background: #eee;
+    }
+
+    .tab-btn.active {
+      background: #fff;
+      border-color: #bbb;
+      font-weight: 600;
+    }
+
+    .tab-content {
+      flex: 1;
+      height: 100%;
+      overflow-y: auto;
+      padding: 10px 14px;
+      border-left: none;
+    }
+
+    #realtime-summary {
+      margin: 8px 0 4px;
+      background: rgba(241, 245, 249, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #1e293b;
+      line-height: 1.4;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    #realtime-summary .summary-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: #0f172a;
+    }
+
+    #realtime-summary .summary-cols {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 10px;
+    }
+
+    #realtime-summary .summary-cols span {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    #realtime-summary .summary-cols span strong {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    /* Login Screen Redesign */
+    #login-overlay {
+      position: fixed;
+      inset: 0;
+      background: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 45;
+      /* Below loader (50) but above map (0) and other UI */
+      transition: opacity 0.6s ease-out, visibility 0.6s;
+      overflow: hidden;
+    }
+
+    #login-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    /* Maritime Background Animation */
+    .ocean {
+      height: 5%;
+      width: 100%;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      background: #015871;
+      z-index: -1;
+    }
+
+    .wave {
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 88.7'%3E%3Cpath d='M800 56.9c-155.5 0-204.9-50-405.5-49.9-200 0-250 49.9-394.5 49.9v31.8h800v-.2-31.6z' fill='%23003F5C'/%3E%3C/svg%3E");
+      position: absolute;
+      width: 200%;
+      height: 100%;
+      animation: wave 10s -3s linear infinite;
+      transform: translate3d(0, 0, 0);
+      opacity: 0.8;
+    }
+
+    .wave:nth-of-type(2) {
+      bottom: 0;
+      animation: wave 18s linear reverse infinite;
+      opacity: 0.5;
+    }
+
+    .wave:nth-of-type(3) {
+      bottom: 0;
+      animation: wave 20s -1s linear infinite;
+      opacity: 0.5;
+    }
+
+    @keyframes wave {
+      0% {
+        transform: translateX(0);
+      }
+
+      50% {
+        transform: translateX(-25%);
+      }
+
+      100% {
+        transform: translateX(-50%);
+      }
+    }
+
+    /* Glassmorphism Login Box */
+    #login-box {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      text-align: center;
+      position: relative;
+      z-index: 10;
+    }
+
+    #login-box h2 {
+      margin: 0 0 10px 0;
+      color: #f8fafc;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    #login-box p {
+      color: #94a3b8;
+      font-size: 14px;
+      margin-top: -10px;
+      margin-bottom: 10px;
+    }
+
+    #login-box input {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(51, 65, 85, 0.5);
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+      transition: all 0.2s;
+      outline: none;
+      box-sizing: border-box;
+    }
+
+    #login-box input:focus {
+      border-color: #0ea5e9;
+      background: rgba(15, 23, 42, 0.8);
+      box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
+    }
+
+    #login-box input::placeholder {
+      color: #64748b;
+    }
+
+    #login-box button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 10px;
+      box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.2);
+    }
+
+    #login-box button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 15px -3px rgba(14, 165, 233, 0.3);
+    }
+
+    #login-box button:active {
+      transform: translateY(0);
+    }
+
+    #login-error {
+      color: #ef4444;
+      font-size: 13px;
+      min-height: 20px;
+      margin-top: 5px;
+    }
+
+    @media (max-width: 900px) {
+      #left-controls {
+        max-width: calc(100vw - 32px);
+      }
+
+      #toolbar {
+        flex-direction: row;
+        align-items: center;
+      }
+
+      #toolbar .button-column {
+        flex-direction: row;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+    }
+
+    .layer-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .gear-btn {
+      border: 1px solid #2563eb;
+      background: transparent;
+      color: #2563eb;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    .gear-btn:hover {
+      background: rgba(37, 99, 235, 0.12);
+      color: #1d4ed8;
+    }
+
+    @keyframes spin-helm {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .maritime-loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      width: 100%;
+      color: #0ea5e9;
+      gap: 10px;
+      font-size: 13px;
+      padding: 20px;
+    }
+
+    .maritime-loader svg {
+      width: 48px;
+      height: 48px;
+      animation: spin-helm 2s linear infinite;
+    }
+
+    #global-loader {
+      position: fixed;
+      inset: 0;
+      background: #0f172a;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #0ea5e9;
+      transition: opacity 0.5s ease-out;
+    }
+
+    #global-loader.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #global-loader .maritime-loader {
+      height: auto;
+      width: auto;
+      padding: 0;
+    }
+
+    .loader-text {
+      margin-top: 12px;
+      font-size: 16px;
+      font-weight: 500;
+      color: #e2e8f0;
+      min-height: 24px;
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="global-loader">
+    <div class="maritime-loader">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 2v20" />
+        <path d="M2 12h20" />
+        <path d="M12 12l4.24-4.24" />
+        <path d="M12 12l4.24 4.24" />
+        <path d="M12 12l-4.24-4.24" />
+        <path d="M12 12l-4.24 4.24" />
+      </svg>
+    </div>
+    <div class="loader-text" id="loader-text">Cargando a bordo...</div>
+  </div>
+
+  <div id="wms-legend-container"></div>
+
+  <div id="map"></div>
+
+  <div id="left-controls">
+    <div id="panel">
+      <div>
+        <b>Legend:</b>
+        <span class="dot green"></span>OK
+        <span class="dot yellow"></span>&gt;1h
+        <span class="dot red"></span>&gt;4h
+        <span class="dot gray"></span>Sin telemetría
+        <span class="dot blink-red"></span>Panic
+      </div>
+      <div id="session-info">
+        <span>Invitado</span>
+        <button id="logout-btn" title="Cerrar sesión">⏻</button>
+      </div>
+      <div id="info">Listening for live positions…</div>
+      <div id="realtime-summary" style="display:none;"></div>
+      <details class="panel-section">
+        <summary>Mapa base</summary>
+        <div id="basemap-list" class="layer-list"></div>
+      </details>
+      <details class="panel-section">
+        <summary>
+          <div class="layer-summary" style="display:inline-flex; width: calc(100% - 20px); vertical-align: middle;">
+            <span>Capas disponibles</span>
+            <button id="layer-admin-btn" class="gear-btn" title="Administrar capas">⚙️</button>
+          </div>
+        </summary>
+        <div id="layer-controls" class="layer-list"></div>
+      </details>
+      <div id="coords-tooltip">
+        <div class="coord-line">Lat: ---, Lon: ---</div>
+        <div class="measure-lines"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toolbar">
+    <div class="button-column">
+      <button class="tool-btn active" data-tool="select" title="Seleccionar">🖱️</button>
+      <button class="tool-btn" data-tool="measure-line" title="Medir distancia">📏</button>
+      <button class="tool-btn" data-tool="measure-area" title="Medir área">⬠</button>
+      <button class="tool-btn" data-tool="draw-rectangle" title="Dibujar rectángulo">▭</button>
+      <button class="tool-btn" data-tool="draw-circle" title="Dibujar círculo">◎</button>
+      <button class="tool-btn" data-tool="delete" title="Eliminar selección">🗑️</button>
+      <button class="tool-btn" data-tool="cluster" title="Agrupar embarcaciones">🗂️</button>
+      <button class="tool-btn" data-tool="clear" title="Limpiar mediciones">🧹</button>
+      <button class="tool-btn" id="logout-btn" data-tool="logout" title="Cerrar sesión"
+        style="color:#ef4444;">⏻</button>
+    </div>
+  </div>
+
+
+
+  <div id="bottom-panel" class="hidden">
+    <div class="bottom-panel-header">
+      <div class="tabs">
+        <button class="tab-btn bottom active" data-btab="ficha">🚢 Ficha de la Nave</button>
+        <button class="tab-btn bottom" data-btab="alerts">🚨 Alertas</button>
+        <button class="tab-btn bottom" data-btab="vessels">Embarcaciones</button>
+      </div>
+      <div class="actions">
+        <input id="bottom-search" type="text" placeholder="Filtrar..." />
+        <button id="bottom-close" class="icon-btn" title="Cerrar">✕</button>
+      </div>
+    </div>
+    <div class="bottom-panel-body">
+      <div id="bottom-tab-ficha" class="bottom-tab active">
+        <div id="ficha-content" class="ficha-layout">
+          <div class="ficha-detail">
+            <div class="tab-menu vessel-tabs">
+              <button class="vessel-tab active" data-tab="basic">Básica</button>
+              <button class="vessel-tab" data-tab="features">Características</button>
+              <button class="vessel-tab" data-tab="areas">Áreas</button>
+              <button class="vessel-tab" data-tab="certs">Certificados</button>
+              <button class="vessel-tab" data-tab="engines">Motores</button>
+              <button class="vessel-tab" data-tab="owner">Propietario</button>
+              <button class="vessel-tab" data-tab="manning">Dotación</button>
+              <button class="vessel-tab" data-tab="crew">Tripulación</button>
+              <button class="vessel-tab" data-tab="armador">Armador</button>
+              <button class="vessel-tab" data-tab="armador_license">Matrícula Arm.</button>
+              <button class="vessel-tab" data-tab="passengers">Pasajeros</button>
+              <button class="vessel-tab" data-tab="voyages">Zarpes</button>
+            </div>
+            <div id="panel-content-v2" class="tab-content">
+              <em>Haz clic en una embarcación…</em>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="bottom-tab-alerts" class="bottom-tab">
+        <div id="alerts-grid" class="alerts-grid">
+          <div class="kv-empty">Cargando alertas...</div>
+        </div>
+      </div>
+      <div id="vessels-tab-content" class="bottom-tab">
+        <div id="analysis-controls"
+          style="display:none; padding:10px; background:#f1f5f9; border-bottom:1px solid #e2e8f0; margin-bottom:8px;">
+          <div style="font-size:12px; font-weight:600; color:#334155; margin-bottom:6px;">Análisis Histórico (Máx 4
+            naves)</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="date" id="analysis-start" class="date-input">
+            <input type="date" id="analysis-end" class="date-input">
+            <button id="btn-analyze" class="action-btn" style="background:#22c55e; color:white;">Analizar</button>
+            <button id="btn-clear-analysis" class="action-btn"
+              style="background:#ef4444; color:white; padding:4px 8px;">✕</button>
+          </div>
+        </div>
+        <div id="vessels-table" class="table-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <button id="bottom-toggle" class="bottom-toggle">Información y Alertas ▴</button>
+
+  <div id="login-overlay" class="hidden">
+    <!-- Background Animation -->
+    <div class="ocean">
+      <div class="wave"></div>
+      <div class="wave"></div>
+      <div class="wave"></div>
+    </div>
+
+    <div id="login-box">
+      <h2>Bienvenido a Bordo</h2>
+      <p>SIGMAP GIS Realtime Viewer</p>
+      <input type="text" id="username" placeholder="Usuario" />
+      <input type="password" id="password" placeholder="Contraseña" />
+      <button id="login-btn">Iniciar Sesión</button>
+      <div id="login-error"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.js"></script>
+  <script>
+    if (typeof window !== 'undefined' && typeof maplibregl !== 'undefined') {
+      window.mapboxgl = maplibregl;
+    }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mapbox-gl-draw/1.4.3/mapbox-gl-draw.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  <script>
+    const baseMaps = [
+      { id: 'google-streets', title: 'Google Mapas', tileUrl: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=es', attribution: '© Google' },
+      { id: 'google-hybrid', title: 'Google Híbrido', tileUrl: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&hl=es', attribution: '© Google' },
+      { id: 'osm', title: 'OpenStreetMap', tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors' },
+      { id: 'esri-satellite', title: 'Esri Satélite', tileUrl: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri' },
+      { id: 'esri-maps', title: 'Esri Mapas', tileUrl: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri' }
+    ];
+    const defaultBaseMapId = 'google-streets';
+
+    const mapStyle = {
+      version: 8,
+      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+      sources: {},
+      layers: []
+    };
+    baseMaps.forEach(cfg => {
+      const sourceId = `basemap-${cfg.id}`;
+      const layerId = `${sourceId}-layer`;
+      cfg.sourceId = sourceId;
+      cfg.layerId = layerId;
+      mapStyle.sources[sourceId] = {
+        type: 'raster',
+        tiles: [cfg.tileUrl],
+        tileSize: 256,
+        attribution: cfg.attribution
+      };
+      mapStyle.layers.push({
+        id: layerId,
+        type: 'raster',
+        source: sourceId,
+        minzoom: 0,
+        maxzoom: 22,
+        layout: { visibility: cfg.id === defaultBaseMapId ? 'visible' : 'none' }
+      });
+    });
+
+    const vesselIconPath = '/static/icons/icons_barcos/barco_generico.svg';
+    const vesselIconColors = {
+      green: '#22c55e',
+      yellow: '#fbbf24',
+      orange: '#f97316',
+      red: '#ef4444'
+    };
+    let vesselIconsReady = false;
+
+    async function loadSvgImageData(path, color, size = 48) {
+      const svgText = await fetch(path, { cache: 'no-store' }).then(r => r.text());
+      const blob = new Blob([svgText], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      try {
+        const img = await new Promise((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = url;
+        });
+        const ratio = Math.max(1, Math.round(window.devicePixelRatio || 1));
+        const dim = size * ratio;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = dim;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas no disponible');
+        ctx.drawImage(img, 0, 0, dim, dim);
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, dim, dim);
+        const imgData = ctx.getImageData(0, 0, dim, dim);
+        return { width: dim, height: dim, data: imgData.data, pixelRatio: ratio };
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    const vesselGroups = ['guardia_costera', 'pesqueros', 'carga', 'pasajeros', 'tanqueros'];
+    const vesselSizes = ['t10', 't150', 't150p'];
+
+    async function ensureVesselIcons() {
+      if (vesselIconsReady) return;
+      try {
+        // Legacy fallback icons (optional, but kept for safety)
+        for (const [key, color] of Object.entries(vesselIconColors)) {
+          const { width, height, data, pixelRatio } = await loadSvgImageData(vesselIconPath, color, 64);
+          const id = `vessel-${key}`;
+          if (map.hasImage && map.hasImage(id)) map.removeImage(id);
+          map.addImage(id, { width, height, data }, { pixelRatio });
+        }
+
+        // New Dynamic Colored Icons
+        const loadPromises = [];
+        const statusColors = {
+          'green': '#22c55e',
+          'yellow': '#fbbf24',
+          'orange': '#f97316',
+          'red': '#ef4444',
+          'gray': '#9ca3af',
+          'blink-red': '#ef4444' // Map blink-red to red for static icon
+        };
+
+        // Base colors to replace in SVGs (Navy, Teal, Deep Red, Blue, Red)
+        const baseColorRegex = /fill="#(1d3557|2a9d8f|8d0801|457b9d|d62828)"/gi;
+
+        vesselGroups.forEach(group => {
+          vesselSizes.forEach(size => {
+            const baseIconId = `${group}_${size}`;
+            const url = `/static/icons/ship_shapes_v2/${baseIconId}.svg`;
+
+            loadPromises.push(fetch(url).then(r => r.text()).then(svgText => {
+              // Verify basic SVG validity
+              if (!svgText.includes('<svg')) return;
+
+              const variants = Object.entries(statusColors);
+              return Promise.all(variants.map(([statusName, statusHex]) => {
+                return new Promise((resolve) => {
+                  // Replace base color with status color
+                  const coloredSvg = svgText.replace(baseColorRegex, `fill="${statusHex}"`);
+
+                  // Rasterize
+                  const img = new Image();
+                  img.src = 'data:image/svg+xml;base64,' + btoa(coloredSvg);
+                  img.onload = () => {
+                    try {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = img.width;
+                      canvas.height = img.height;
+                      const ctx = canvas.getContext('2d');
+                      ctx.drawImage(img, 0, 0);
+
+                      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                      const mapId = `shp_${baseIconId}_${statusName}`;
+                      if (map.hasImage(mapId)) map.removeImage(mapId);
+                      map.addImage(mapId, imageData);
+                    } catch (e) {
+                      console.warn(`Error rasterizing variant ${baseIconId}_${statusName}:`, e);
+                    }
+                    resolve();
+                  };
+                  img.onerror = () => resolve(); // Validate fail gracefully
+                });
+              }));
+            }).catch(e => console.warn(`Failed to load base SVG ${url}:`, e)));
+          });
+        });
+
+        await Promise.all(loadPromises);
+        vesselIconsReady = true;
+        console.log("Vessel icons (colored variants) loaded.");
+      } catch (err) {
+        console.warn('No se pudieron cargar iconos de barco', err);
+      }
+    }
+
+    function normalizeVesselGroup(rawGroup) {
+      if (!rawGroup) return 'carga'; // Default
+      const lower = rawGroup.toLowerCase().trim();
+      if (lower.includes('guardia')) return 'guardia_costera';
+      if (lower.includes('pesca') || lower.includes('pesqu')) return 'pesqueros';
+      if (lower.includes('carga')) return 'carga';
+      if (lower.includes('pasajer')) return 'pasajeros';
+      if (lower.includes('tanque')) return 'tanqueros';
+      return 'carga'; // Default fallback
+    }
+
+    function getVesselIconId(group, trb, status) {
+      // If vessel has alert/panic, maybe stick to red/status color?
+      // For now, user request focuses on shape. We can assume status is secondary or handled by circle halo?
+      // Let's use the shape.
+
+      const normGroup = normalizeVesselGroup(group);
+      let sizeSuffix = 't10';
+      const val = Number(trb) || 0;
+
+      if (val <= 10) sizeSuffix = 't10';
+      else if (val <= 150) sizeSuffix = 't150';
+      else sizeSuffix = 't150p';
+
+      // Map complex statuses (blink-red) to basic color names
+      let statusSuffix = 'green';
+      if (status === 'red' || status === 'blink-red') statusSuffix = 'red';
+      else if (status === 'orange') statusSuffix = 'orange';
+      else if (status === 'yellow') statusSuffix = 'yellow';
+      else if (status === 'gray') statusSuffix = 'gray';
+
+      const iconId = `${normGroup}_${sizeSuffix}_${statusSuffix}`;
+      return iconId;
+    }
+
+    function upsertVessel(d) {
+      const id = d.nave_id ?? d.mmsi;
+      if (id == null) return;
+      const lon = Number(d.lon);
+      const lat = Number(d.lat);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+      const mmsi = d.mmsi ?? null;
+      const naveId = d.nave_id ?? null;
+      const status = d.status_color || 'green';
+      const color = colorFromStatus(status);
+
+      // Calculate dynamic icon based on group and TRB
+      let rawIconId = getVesselIconId(d.nave_grupo, d.trb, status);
+      let iconId = `shp_${rawIconId}`; // Prefix to ensure unique namespace
+
+      // Determine Alert Color based on severity
+      let alertActive = Boolean(d.panic);
+      let alertColor = null;
+
+      // 1. Check loaded alerts
+      if (state.alerts && state.alerts.length) {
+        const alert = state.alerts.find(a =>
+          (a.nave_id && String(a.nave_id) === String(naveId)) ||
+          (a.nave_mmsi && String(a.nave_mmsi) === String(mmsi))
+        );
+        if (alert) {
+          const sev = String(alert.severidad || '').toLowerCase();
+          if (sev.includes('crit')) {
+            alertActive = true;
+            alertColor = '#ef4444';
+          } else if (sev.includes('medio')) {
+            alertActive = true;
+            alertColor = '#f97316';
+          }
+          // Blue/Other alerts are explicitly IGNORED (alertActive stays as d.panic)
+        }
+      }
+
+      // 2. Fallback: Hardware Panic gets priority if no specific alert color set yet
+      if (d.panic && !alertColor) {
+        alertActive = true;
+        alertColor = '#ef4444';
+      }
+
+      state.vessels[id] = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+        properties: {
+          nave_id: naveId,
+          mmsi,
+          matricula: d.matricula || '',
+          name: d.name || '',
+          sog_knots: d.sog_knots ?? null,
+          cog_deg: d.cog_deg ?? null,
+          ts: d.ts ?? null,
+          color,
+          iconId,
+          status_color: status,
+          alert: alertActive,
+          alert_color: alertColor || undefined, // undefined removes key from JSON
+          panic: Boolean(d.panic),
+          nave_grupo: d.nave_grupo || '',
+          trb: d.trb || 0
+        }
+      };
+      if (state.currentNaveId && String(state.currentNaveId) === String(id)) {
+        updateRealtimeSummary(state.vessels[id]);
+      }
+      updateAnalysisUI();
+    }
+
+    function refreshVesselAlerts() {
+      if (!state.vessels) return;
+
+      const alertFeatures = [];
+
+      Object.keys(state.vessels).forEach(key => {
+        const feature = state.vessels[key];
+        const props = feature.properties;
+        const naveId = props.nave_id;
+        const mmsi = props.mmsi;
+
+        let alertActive = Boolean(props.panic);
+        let alertColor = null;
+
+        // Check against loaded alerts
+        if (state.alerts && state.alerts.length) {
+          const alert = state.alerts.find(a =>
+            (a.nave_id && String(a.nave_id) === String(naveId)) ||
+            (a.nave_mmsi && String(a.nave_mmsi) === String(mmsi))
+          );
+          if (alert) {
+            const sev = String(alert.severidad || '').toLowerCase();
+            if (sev.includes('crit')) {
+              alertActive = true;
+              alertColor = '#ef4444';
+            } else if (sev.includes('medio')) {
+              alertActive = true;
+              alertColor = '#f97316';
+            }
+          }
+        }
+
+        // Hardware panic priority
+        if (Boolean(props.panic) && !alertColor) {
+          alertActive = true;
+          alertColor = '#ef4444';
+        }
+
+        // If this vessel has an active alert color, add to separate pulse source
+        if (alertActive && alertColor) {
+          alertFeatures.push({
+            type: 'Feature',
+            geometry: { ...feature.geometry },
+            properties: {
+              alert_color: alertColor
+            }
+          });
+        }
+      });
+
+      // Update the dedicated source with ONLY the alert vessels
+      if (map && map.getSource('alert-pulse-source')) {
+        map.getSource('alert-pulse-source').setData({
+          type: 'FeatureCollection',
+          features: alertFeatures
+        });
+      }
+    }
+
+    function iconIdFromStatus(status) {
+      if (status === 'blink-red' || status === 'red') return 'vessel-red';
+      if (status === 'orange') return 'vessel-orange';
+      if (status === 'yellow') return 'vessel-yellow';
+      return 'vessel-green';
+    }
+
+    const DRAW_STYLE = {
+      fillColor: 'rgba(34,197,94,0.28)',
+      fillOpacity: 0.28,
+      strokeColor: '#15803d',
+      lineColor: '#15803d',
+      pointColor: '#15803d',
+      textColor: '#0f172a',
+      textHalo: 'rgba(241,245,249,0.88)'
+    };
+    const DRAW_ACTIVE_FILL_OPACITY = Math.min(1, DRAW_STYLE.fillOpacity + 0.08);
+
+    function ensureFeatureProperties(featureId, updates, cache) {
+      if (!draw || !featureId || !updates) return cache || null;
+      const target = cache || (() => {
+        const feature = typeof draw.get === 'function' ? draw.get(featureId) : null;
+        if (!feature) return null;
+        return feature.properties ? { ...feature.properties } : {};
+      })();
+      if (!target) return cache || null;
+      Object.entries(updates).forEach(([key, value]) => {
+        if (target[key] === value) return;
+        draw.setFeatureProperty(featureId, key, value);
+        target[key] = value;
+      });
+      return target;
+    }
+
+    const drawStyles = [
+      {
+        id: 'gl-draw-polygon-fill-inactive',
+        type: 'fill',
+        filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+        paint: {
+          'fill-color': DRAW_STYLE.fillColor,
+          'fill-opacity': DRAW_STYLE.fillOpacity,
+          'fill-outline-color': DRAW_STYLE.strokeColor
+        }
+      },
+      {
+        id: 'gl-draw-polygon-fill-active',
+        type: 'fill',
+        filter: ['all', ['==', '$type', 'Polygon'], ['==', 'active', 'true']],
+        paint: {
+          'fill-color': DRAW_STYLE.fillColor,
+          'fill-opacity': DRAW_ACTIVE_FILL_OPACITY,
+          'fill-outline-color': DRAW_STYLE.strokeColor
+        }
+      },
+      {
+        id: 'gl-draw-polygon-stroke-inactive',
+        type: 'line',
+        filter: ['all', ['==', '$type', 'Polygon'], ['!=', 'mode', 'static']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': DRAW_STYLE.strokeColor, 'line-width': 2 }
+      },
+      {
+        id: 'gl-draw-polygon-stroke-active',
+        type: 'line',
+        filter: ['all', ['==', '$type', 'Polygon'], ['==', 'active', 'true']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': DRAW_STYLE.strokeColor, 'line-width': 2.6 }
+      },
+      {
+        id: 'gl-draw-line-inactive',
+        type: 'line',
+        filter: ['all', ['==', '$type', 'LineString'], ['!=', 'mode', 'static']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': DRAW_STYLE.lineColor, 'line-width': 2.4 }
+      },
+      {
+        id: 'gl-draw-line-active',
+        type: 'line',
+        filter: ['all', ['==', '$type', 'LineString'], ['==', 'active', 'true']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': DRAW_STYLE.lineColor, 'line-width': 2.6, 'line-dasharray': [0.3, 1.2] }
+      },
+      {
+        id: 'gl-draw-point-inactive',
+        type: 'circle',
+        filter: ['all', ['==', '$type', 'Point'], ['!=', 'meta', 'midpoint'], ['!=', 'mode', 'static']],
+        paint: { 'circle-radius': 5, 'circle-color': DRAW_STYLE.pointColor, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 }
+      },
+      {
+        id: 'gl-draw-point-active',
+        type: 'circle',
+        filter: ['all', ['==', '$type', 'Point'], ['!=', 'meta', 'midpoint'], ['==', 'active', 'true']],
+        paint: { 'circle-radius': 6, 'circle-color': DRAW_STYLE.pointColor, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 }
+      },
+      {
+        id: 'gl-draw-polygon-fill-static',
+        type: 'fill',
+        filter: ['all', ['==', '$type', 'Polygon'], ['==', 'mode', 'static']],
+        paint: {
+          'fill-color': DRAW_STYLE.fillColor,
+          'fill-opacity': DRAW_STYLE.fillOpacity,
+          'fill-outline-color': DRAW_STYLE.strokeColor
+        }
+      },
+      {
+        id: 'gl-draw-line-static',
+        type: 'line',
+        filter: ['all', ['==', '$type', 'LineString'], ['==', 'mode', 'static']],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': DRAW_STYLE.lineColor, 'line-width': 2 }
+      },
+      {
+        id: 'gl-draw-point-static',
+        type: 'circle',
+        filter: ['all', ['==', '$type', 'Point'], ['==', 'mode', 'static']],
+        paint: { 'circle-radius': 5, 'circle-color': DRAW_STYLE.pointColor, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 }
+      },
+      {
+        id: 'gl-draw-polygon-midpoint',
+        type: 'circle',
+        filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'midpoint']],
+        paint: { 'circle-radius': 4, 'circle-color': '#f97316', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 }
+      },
+      {
+        id: 'gl-draw-polygon-and-line-vertex-halo-active',
+        type: 'circle',
+        filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex'], ['==', 'active', 'true']],
+        paint: { 'circle-radius': 8, 'circle-color': '#bfdbfe' }
+      },
+      {
+        id: 'gl-draw-polygon-and-line-vertex-active',
+        type: 'circle',
+        filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex'], ['==', 'active', 'true']],
+        paint: { 'circle-radius': 5, 'circle-color': '#1d4ed8', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.5 }
+      }
+    ];
+
+    let draw = null;
+    const coordsWrapper = document.getElementById('coords-tooltip');
+    const coordsLineEl = coordsWrapper ? coordsWrapper.querySelector('.coord-line') : null;
+    const measureLinesEl = coordsWrapper ? coordsWrapper.querySelector('.measure-lines') : null;
+    const sessionInfoEl = document.getElementById('session-info');
+    const sessionUserEl = sessionInfoEl ? sessionInfoEl.querySelector('span') : null;
+    const logoutBtn = document.getElementById('logout-btn');
+    const realtimeSummaryEl = document.getElementById('realtime-summary');
+    const fichaContentEl = document.getElementById('ficha-content');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    function sanitizeMeasurementOutput() {
+      if (!measureLinesEl) return;
+      measureLinesEl.querySelectorAll('strong').forEach(node => {
+        if (node.hasAttribute('style')) node.removeAttribute('style');
+      });
+    }
+
+    const measureMarkers = [];
+
+    function updateRealtimeSummary(feature) {
+      if (!realtimeSummaryEl) return;
+      if (!feature) {
+        realtimeSummaryEl.style.display = 'none';
+        return;
+      }
+      realtimeSummaryEl.style.display = 'block';
+      const props = feature.properties || {};
+      const coords = feature.geometry?.coordinates || [];
+      const lat = Number.isFinite(coords[1]) ? toDMS(coords[1], true) : '-';
+      const lon = Number.isFinite(coords[0]) ? toDMS(coords[0], false) : '-';
+      const sog = props.sog_knots != null ? `${Number(props.sog_knots).toFixed(1)} kn` : '-';
+      const cogValue = props.cog_deg != null ? Number(props.cog_deg) : null;
+      const cogText = cogValue == null ? '-' : `${cogValue.toFixed(0)}°`;
+      const arrow = cogValue == null ? '' : headingArrowHTML(cogValue, { size: 14, margin: 4 });
+      const ts = fmtTs(props.ts);
+      const status = props.alert ? '<span style="color:#dc2626;font-weight:600;">Alerta</span>' : '<span style="color:#16a34a;font-weight:600;">Normal</span>';
+      realtimeSummaryEl.innerHTML = `
+          <div class="summary-title">${props.name || 'Embarcación'} <span style="color:#64748b; font-weight:400;">${props.matricula ? `(${props.matricula})` : ''}</span></div>
+      <div class="summary-cols">
+        <span><small>Nave ID</small><strong>${props.nave_id || '-'}</strong></span>
+        <span><small>MMSI</small><strong>${props.mmsi || '-'}</strong></span>
+        <span><small>Estado</small>${status}</span>
+        <span><small>Velocidad</small><strong>${sog}</strong></span>
+        <span><small>Lon</small><strong>${lon}</strong></span>
+        <span><small>Lat</small><strong>${lat}</strong></span>
+        <span><small>Rumbo</small><strong>${arrow}${cogText}</strong></span>
+      </div>
+      <div style="font-size:11px; color:#475569;">Actualizado: ${ts}</div>
+        `;
+    }
+
+    function setFichaVisibility(hasVessel) {
+      if (fichaContentEl) fichaContentEl.classList.remove('hidden');
+    }
+
+    function updateRealtimeSummaryById(id) {
+      if (!id || !state.vessels[id]) {
+        updateRealtimeSummary(null);
+        return;
+      }
+      updateRealtimeSummary(state.vessels[id]);
+    }
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: mapStyle,
+      center: [-79.8891, -2.1901],
+      zoom: 6,
+      maxZoom: 22
+    });
+    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
+    let authToken = null;
+    const bottomPanelEl = document.getElementById('bottom-panel');
+    const bottomToggleEl = document.getElementById('bottom-toggle');
+    const bottomCloseEl = document.getElementById('bottom-close');
+    const bottomSearchEl = document.getElementById('bottom-search');
+    const bottomTabFicha = document.getElementById('bottom-tab-ficha');
+    const bottomTabAlerts = document.getElementById('bottom-tab-alerts');
+    const bottomTabVessels = document.getElementById('vessels-tab-content'); // Updated ID
+    const alertsTableEl = document.getElementById('alerts-grid');
+    const vesselsTableEl = document.getElementById('vessels-table');
+    const bottomTabButtons = document.querySelectorAll('.tab-btn.bottom');
+    const vesselTabButtons = document.querySelectorAll('.vessel-tab');
+    const state = {
+      booted: false,
+      staticLayers: [],
+      vessels: {},
+      ws: null,
+      currentMMSI: null,
+      currentNaveId: null,
+      currentTab: 'basic',
+      user: null,
+      currentBaseMap: defaultBaseMapId,
+      bottomTabVessels: null,
+      analysisSelection: new Set(),
+      projection: { enabled: false, minutes: 60, interval: null, data: null },
+      clusterEnabled: false,
+      bottomOpen: false,
+      bottomTab: 'ficha',
+      alerts: [],
+      alertsLoaded: false,
+      currentPhotos: [],
+      currentPhotoIndex: 0,
+      currentVesselDisplayName: ''
+    };
+
+    function setNoMeasurements() {
+      if (!measureLinesEl) return;
+      measureLinesEl.innerHTML = '<div class="measure-empty">Sin mediciones.</div>';
+      sanitizeMeasurementOutput();
+      updateMeasureMarkers([]);
+    }
+    setNoMeasurements();
+
+    if (typeof MapboxDraw !== 'undefined') {
+      draw = new MapboxDraw({ displayControlsDefault: false, controls: {}, styles: drawStyles });
+      map.addControl(draw);
+      initMeasurementTools();
+    } else {
+      console.warn('MapboxDraw no disponible, herramientas de medición deshabilitadas.');
+      if (measureLinesEl) measureLinesEl.innerHTML = '<div class="measure-empty">Herramientas no disponibles.</div>';
+    }
+
+    map.on('mousemove', (e) => updateCoords(e));
+    map.getCanvas().addEventListener('mouseleave', resetCoords);
+    resetCoords();
+
+    const mapReady = new Promise(resolve => map.on('load', resolve));
+    map.on('style.load', () => {
+      // map loaded
+    });
+
+    // Explicitly add coordinate tracking
+    map.on('mousemove', (e) => {
+      updateCoords(e.lngLat);
+    });
+    map.on('load', () => {
+      updateMeasureMarkers([]);
+    });
+
+    function initMeasurementTools() {
+      if (!draw || typeof turf === 'undefined') {
+        if (measureLinesEl) measureLinesEl.innerHTML = '<div class="measure-empty">Herramientas de medición no disponibles.</div>';
+        return;
+      }
+      const toolbarEl = document.getElementById('toolbar');
+      if (!toolbarEl || !measureLinesEl) return;
+
+      const columnEl = toolbarEl.querySelector('.button-column');
+      const allowedTools = ['select', 'measure-line', 'measure-area', 'draw-rectangle', 'draw-circle', 'delete', 'cluster', 'clear', 'logout'];
+      if (columnEl) {
+        const lookup = new Map();
+        Array.from(columnEl.querySelectorAll('.tool-btn')).forEach(btn => {
+          const key = btn.dataset?.tool;
+          if (key) lookup.set(key, btn);
+        });
+        columnEl.innerHTML = '';
+        allowedTools.forEach(tool => {
+          const btn = lookup.get(tool);
+          if (btn) columnEl.appendChild(btn);
+        });
+      }
+      Array.from(toolbarEl.querySelectorAll('.tool-btn')).forEach(btn => {
+        const key = btn.dataset?.tool;
+        if (!key || !allowedTools.includes(key)) btn.remove();
+      });
+
+      const buttons = columnEl
+        ? Array.from(columnEl.querySelectorAll('.tool-btn'))
+        : Array.from(toolbarEl.querySelectorAll('.tool-btn'));
+      let activeTool = 'select';
+      const specialDrawState = {
+        active: false,
+        type: null,
+        start: null,
+        featureId: null,
+        radius: 0,
+        lastLngLat: null
+      };
+
+      const toolButtons = buttons.filter(btn => btn.dataset.tool);
+      const pathModes = new Set(['draw_line_string', 'draw_polygon']);
+
+      function handleToolClick(tool) {
+        if (!tool) return;
+        if (tool === 'logout') {
+          handleLogout();
+          return;
+        }
+        if (tool === 'delete') {
+          draw.trash();
+          refreshMeasurements();
+          return;
+        }
+        if (tool === 'clear') {
+          draw.deleteAll();
+          refreshMeasurements();
+          handleToolClick('select');
+          return;
+        }
+        if (tool === 'cluster') {
+          state.clusterEnabled = !state.clusterEnabled;
+          setClusterEnabled(state.clusterEnabled);
+          const btn = toolButtons.find(b => b.dataset.tool === 'cluster');
+          if (btn) btn.classList.toggle('active', state.clusterEnabled);
+          return;
+        }
+        activeTool = tool;
+        toolButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tool === tool && tool !== 'logout'));
+        const mode = modeForTool(tool);
+        if (mode) draw.changeMode(mode);
+        if (tool === 'draw-rectangle' || tool === 'draw-circle') {
+          map.getCanvas().style.cursor = 'crosshair';
+        } else if (!specialDrawState.active) {
+          map.getCanvas().style.cursor = '';
+        }
+      }
+
+      function setupToolbar() {
+        toolButtons.forEach(btn => {
+          btn.addEventListener('click', () => handleToolClick(btn.dataset.tool));
+        });
+        handleToolClick('select');
+      }
+
+      setupToolbar();
+      refreshMeasurements();
+
+      map.on('draw.create', handleDrawEvent);
+      map.on('draw.update', handleDrawEvent);
+      map.on('draw.delete', refreshMeasurements);
+
+      map.on('mousedown', handlePointerDown);
+      map.on('mousemove', handlePointerMove);
+      map.on('mouseup', handlePointerUp);
+      map.on('touchstart', handlePointerDown);
+      map.on('touchmove', handlePointerMove);
+      map.on('touchend', handlePointerUp);
+      map.on('touchcancel', cancelAndRefresh);
+
+      map.getCanvas().addEventListener('mouseleave', () => {
+        if (!specialDrawState.active) return;
+        cancelSpecialDraw(true);
+        refreshMeasurements();
+      });
+
+      document.addEventListener('keydown', (ev) => {
+        const targetTag = ev.target?.tagName;
+        if (targetTag === 'INPUT' || targetTag === 'TEXTAREA') return;
+        if (ev.key === 'Escape') {
+          if (specialDrawState.active) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            cancelSpecialDraw(true);
+            refreshMeasurements();
+            return;
+          }
+          if (finalizeCurrentDraw({ rearm: false })) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            return;
+          }
+          ev.preventDefault();
+          ev.stopPropagation();
+          handleToolClick('select');
+        } else if (ev.key === 'Enter' || ev.key === 'NumpadEnter') {
+          if (finalizeCurrentDraw({ rearm: true })) {
+            ev.preventDefault();
+            ev.stopPropagation();
+          }
+        } else if (ev.key === 'Delete' || ev.key === 'Backspace') {
+          if (!draw) return;
+          const selectedIds = typeof draw.getSelectedIds === 'function'
+            ? draw.getSelectedIds()
+            : (draw.getSelected && draw.getSelected().features || []).map(f => f.id);
+          if (selectedIds && selectedIds.length) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            draw.trash();
+            refreshMeasurements();
+          }
+        }
+      });
+
+      function cancelAndRefresh() {
+        if (!specialDrawState.active) return;
+        cancelSpecialDraw(true);
+        refreshMeasurements();
+      }
+
+      function modeForTool(tool) {
+        if (tool === 'measure-line') return 'draw_line_string';
+        if (tool === 'measure-area') return 'draw_polygon';
+        return 'simple_select';
+      }
+
+      function currentDrawMode() {
+        return (draw && typeof draw.getMode === 'function') ? draw.getMode() : null;
+      }
+
+      function finalizeCurrentDraw({ rearm = true } = {}) {
+        const mode = currentDrawMode();
+        if (!pathModes.has(mode)) return false;
+        const previousTool = activeTool;
+        draw.changeMode('simple_select');
+        const shouldRearm = rearm && (previousTool === 'measure-line' || previousTool === 'measure-area');
+        setTimeout(() => {
+          refreshMeasurements();
+          if (shouldRearm) handleToolClick(previousTool);
+        }, 0);
+        return true;
+      }
+
+      function handleDrawEvent(ev) {
+        if (ev && Array.isArray(ev.features)) {
+          ev.features.forEach(f => {
+            if (!f || !f.id || !f.geometry) return;
+            const existing = draw.get(f.id);
+            if (!existing) return;
+            const propsSnapshot = { ...(existing.properties || {}) };
+            let measureType = propsSnapshot.measureType;
+            if (!measureType && f.properties && f.properties.measureType) {
+              measureType = f.properties.measureType;
+            }
+            if (f.geometry.type === 'LineString') {
+              if (measureType !== 'line') {
+                measureType = 'line';
+                ensureFeatureProperties(f.id, { measureType }, propsSnapshot);
+              }
+            } else if (!measureType) {
+              measureType = 'polygon';
+              ensureFeatureProperties(f.id, { measureType }, propsSnapshot);
+            } else if (propsSnapshot.measureType !== measureType) {
+              ensureFeatureProperties(f.id, { measureType }, propsSnapshot);
+            }
+          });
+        }
+        refreshMeasurements();
+        if (activeTool === 'measure-line' || activeTool === 'measure-area') {
+          const repeatMode = modeForTool(activeTool);
+          if (repeatMode) draw.changeMode(repeatMode);
+        }
+      }
+
+      function handlePointerDown(ev) {
+        if (ev.originalEvent && ev.originalEvent.button !== undefined && ev.originalEvent.button !== 0) return;
+        if (activeTool !== 'draw-rectangle' && activeTool !== 'draw-circle') return;
+        if (ev.originalEvent && typeof ev.originalEvent.preventDefault === 'function') ev.originalEvent.preventDefault();
+        specialDrawState.active = true;
+        specialDrawState.type = activeTool === 'draw-rectangle' ? 'rectangle' : 'circle';
+        specialDrawState.start = { lng: ev.lngLat.lng, lat: ev.lngLat.lat };
+        specialDrawState.radius = 0;
+        specialDrawState.lastLngLat = null;
+        try { map.dragPan.disable(); } catch (err) { /* ignore */ }
+        map.getCanvas().style.cursor = 'crosshair';
+        const feature = specialDrawState.type === 'rectangle'
+          ? createRectangleFeature(specialDrawState.start, specialDrawState.start)
+          : createCircleFeature(specialDrawState.start, specialDrawState.start);
+        const ids = draw.add(feature);
+        specialDrawState.featureId = Array.isArray(ids) ? ids[0] : ids;
+      }
+
+      function handlePointerMove(ev) {
+        if (!specialDrawState.active || !specialDrawState.featureId) return;
+        if (!ev.lngLat) return;
+        specialDrawState.lastLngLat = { lng: ev.lngLat.lng, lat: ev.lngLat.lat };
+        updateSpecialDraw(specialDrawState.lastLngLat);
+      }
+
+      function handlePointerUp(ev) {
+        if (!specialDrawState.active) return;
+        const target = ev?.lngLat ? { lng: ev.lngLat.lng, lat: ev.lngLat.lat } : (specialDrawState.lastLngLat || specialDrawState.start);
+        finishSpecialDraw(target);
+      }
+
+      function updateSpecialDraw(lngLat) {
+        if (!lngLat || !specialDrawState.start) return;
+        if (!specialDrawState.featureId) return;
+        let feature = null;
+        if (specialDrawState.type === 'rectangle') {
+          feature = createRectangleFeature(specialDrawState.start, lngLat);
+        } else if (specialDrawState.type === 'circle') {
+          feature = createCircleFeature(specialDrawState.start, lngLat);
+        }
+        if (!feature) return;
+        feature.id = specialDrawState.featureId;
+        draw.add(feature);
+        refreshMeasurements();
+      }
+
+      function finishSpecialDraw(target) {
+        if (!target) {
+          cancelSpecialDraw(true);
+          refreshMeasurements();
+          return;
+        }
+        updateSpecialDraw(target);
+        const id = specialDrawState.featureId;
+        const type = specialDrawState.type;
+        const start = specialDrawState.start ? { ...specialDrawState.start } : null;
+        const radius = specialDrawState.radius;
+        cancelSpecialDraw(false);
+        let propsSnapshot = null;
+        if (id) {
+          const existing = draw.get(id);
+          if (existing && existing.properties) {
+            propsSnapshot = { ...existing.properties };
+          }
+        }
+        if (type === 'circle') {
+          if (!radius || radius < 1) {
+            if (id) draw.delete(id);
+          } else {
+            propsSnapshot = ensureFeatureProperties(id, { measureType: 'circle', radius_m: radius }, propsSnapshot);
+          }
+        }
+        if (activeTool === 'draw-rectangle' || activeTool === 'draw-circle') {
+          map.getCanvas().style.cursor = 'crosshair';
+        }
+        refreshMeasurements();
+      }
+
+      function cancelSpecialDraw(removeFeature) {
+        if (removeFeature && specialDrawState.featureId) {
+          draw.delete(specialDrawState.featureId);
+        }
+        specialDrawState.active = false;
+        specialDrawState.type = null;
+        specialDrawState.start = null;
+        specialDrawState.featureId = null;
+        specialDrawState.radius = 0;
+        specialDrawState.lastLngLat = null;
+        try { map.dragPan.enable(); } catch (err) { /* ignore */ }
+        if (activeTool !== 'draw-rectangle' && activeTool !== 'draw-circle') {
+          map.getCanvas().style.cursor = '';
+        }
+      }
+
+      function createRectangleFeature(start, end) {
+        if (!start || !end) return null;
+        const minLng = Math.min(start.lng, end.lng);
+        const minLat = Math.min(start.lat, end.lat);
+        const maxLng = Math.max(start.lng, end.lng);
+        const maxLat = Math.max(start.lat, end.lat);
+        const coords = [
+          [minLng, minLat],
+          [maxLng, minLat],
+          [maxLng, maxLat],
+          [minLng, maxLat],
+          [minLng, minLat]
+        ];
+        return {
+          type: 'Feature',
+          properties: { measureType: 'rectangle' },
+          geometry: { type: 'Polygon', coordinates: [coords] }
+        };
+      }
+
+      function createCircleFeature(start, end) {
+        if (!start || !end) return null;
+        const center = [start.lng, start.lat];
+        const edge = [end.lng, end.lat];
+        let radiusKm = turf.distance(center, edge, { units: 'kilometers' });
+        if (!Number.isFinite(radiusKm)) radiusKm = 0;
+        specialDrawState.radius = radiusKm * 1000;
+        const drawRadiusKm = Math.max(radiusKm, 0.0001);
+        const circle = turf.circle(center, drawRadiusKm, { steps: 64, units: 'kilometers' });
+        circle.properties = circle.properties || {};
+        circle.properties.measureType = 'circle';
+        circle.properties.radius_m = specialDrawState.radius;
+        return circle;
+      }
+
+      function refreshMeasurements() {
+        const collection = draw.getAll();
+        if (!collection || !collection.features || !collection.features.length) {
+          setNoMeasurements();
+          return;
+        }
+        const rows = [];
+        const labelFeatures = [];
+        collection.features.forEach((feature, idx) => {
+          const result = formatMeasurement(feature, idx + 1);
+          if (result && result.html) {
+            rows.push(result.html);
+          }
+          if (result && result.labelFeature) {
+            labelFeatures.push(result.labelFeature);
+          }
+        });
+        measureLinesEl.innerHTML = rows.join('');
+        sanitizeMeasurementOutput();
+        updateMeasureMarkers(labelFeatures);
+      }
+
+      function formatMeasurement(feature, index) {
+        if (!feature || !feature.geometry) return null;
+        const geometryType = feature.geometry.type;
+        const measureType = feature.properties?.measureType || geometryType;
+        const label = labelForMeasureType(measureType);
+        const labelText = `${label} ${index} `;
+        let labelFeature = createLabelFeature(feature, labelText);
+        if (feature.id) {
+          if (!feature.properties) feature.properties = {};
+          ensureFeatureProperties(feature.id, { featureLabel: labelText }, feature.properties);
+        }
+        const parts = [];
+        try {
+          if (geometryType === 'LineString') {
+            const lengthKm = turf.length(feature, { units: 'kilometers' });
+            parts.push(`Longitud ${formatDistance(lengthKm)} `);
+          } else if (geometryType === 'Polygon') {
+            const perimeterKm = turf.length(turf.polygonToLine(feature), { units: 'kilometers' });
+            const areaSqM = turf.area(feature);
+            if (measureType === 'circle') {
+              const radius = feature.properties?.radius_m;
+              if (Number.isFinite(radius) && radius > 0) parts.push(`Radio ${formatLinear(radius)} `);
+            }
+            if (measureType === 'rectangle') {
+              const dims = rectangleDimensions(feature);
+              if (dims) {
+                parts.push(`Base ${formatLinear(dims.width)} `);
+                parts.push(`Altura ${formatLinear(dims.height)} `);
+              }
+            }
+            parts.push(`Perímetro ${formatDistance(perimeterKm)} `);
+            parts.push(`Área ${formatArea(areaSqM)} `);
+          } else {
+            return null;
+          }
+        } catch (err) {
+          console.warn('No se pudo calcular mediciones', err);
+          return null;
+        }
+        return {
+          html: `< div class="measure-entry" > <strong>${label} ${index}:</strong> ${parts.join(' | ')}</div > `,
+          labelFeature
+        };
+      }
+
+      function labelForMeasureType(type) {
+        const labels = {
+          line: 'Línea',
+          polygon: 'Área',
+          rectangle: 'Rectángulo',
+          circle: 'Círculo'
+        };
+        return labels[type] || 'Figura';
+      }
+
+      function formatDistance(km) {
+        if (!Number.isFinite(km)) return '-';
+        if (km >= 1) return `${km.toLocaleString('es-EC', { maximumFractionDigits: 2 })} km`;
+        const meters = km * 1000;
+        if (meters >= 1) return `${meters.toLocaleString('es-EC', { maximumFractionDigits: 1 })} m`;
+        return `${(meters * 100).toLocaleString('es-EC', { maximumFractionDigits: 1 })} cm`;
+      }
+
+      function formatLinear(meters) {
+        if (!Number.isFinite(meters)) return '-';
+        if (meters >= 1000) return `${(meters / 1000).toLocaleString('es-EC', { maximumFractionDigits: 2 })} km`;
+        if (meters >= 1) return `${meters.toLocaleString('es-EC', { maximumFractionDigits: 1 })} m`;
+        return `${(meters * 100).toLocaleString('es-EC', { maximumFractionDigits: 1 })} cm`;
+      }
+
+      function formatArea(m2) {
+        if (!Number.isFinite(m2)) return '-';
+        if (m2 >= 1_000_000) return `${(m2 / 1_000_000).toLocaleString('es-EC', { maximumFractionDigits: 2 })} km²`;
+        if (m2 >= 10_000) return `${(m2 / 10_000).toLocaleString('es-EC', { maximumFractionDigits: 2 })} ha`;
+        return `${m2.toLocaleString('es-EC', { maximumFractionDigits: 0 })} m²`;
+      }
+
+      function rectangleDimensions(feature) {
+        const ring = feature?.geometry?.coordinates?.[0];
+        if (!ring || ring.length < 4) return null;
+        const bottomLeft = ring[0];
+        const bottomRight = ring[1];
+        const topLeft = ring[3];
+        if (!bottomLeft || !bottomRight || !topLeft) return null;
+        const widthKm = turf.distance(bottomLeft, bottomRight, { units: 'kilometers' });
+        const heightKm = turf.distance(bottomLeft, topLeft, { units: 'kilometers' });
+        return {
+          width: widthKm * 1000,
+          height: heightKm * 1000
+        };
+      }
+    }
+
+
+    renderBaseMapOptions();
+    updateSessionInfo();
+
+    const sourceId = 'vessels';
+    const layerId = 'vessels-layer';
+    const alertPulseLayerId = 'vessels-alert-pulse';
+    const alertLayerId = 'vessels-alert-core';
+    const voyageRouteSourceId = 'voyage-route';
+    const voyageRouteLineId = 'voyage-route-line';
+    const voyageRoutePointId = 'voyage-route-points';
+    const voyageRealSourceId = 'voyage-real';
+    const voyageRealLineId = 'voyage-real-line';
+    const voyageRealPointId = 'voyage-real-points';
+    const clusterSourceId = 'vessels-cluster';
+    const clusterCircleLayerId = 'vessels-cluster-circles';
+    const clusterCountLayerId = 'vessels-cluster-count';
+    const clusterUnclusteredLayerId = 'vessels-cluster-unclustered';
+
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      await performLogin();
+    });
+
+    // Allow pressing Enter in password field to login
+    // Allow pressing Enter in password field to login
+    document.getElementById('password').addEventListener('keypress', async (ev) => {
+      if (ev.key === 'Enter') await performLogin();
+    });
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!state.currentNaveId && !state.currentMMSI) return;
+        setActiveTab(btn.dataset.tab);
+        loadVesselCard({ naveId: state.currentNaveId, mmsi: state.currentMMSI }, btn.dataset.tab);
+      });
+    });
+    document.getElementById('btn-analyze')?.addEventListener('click', runAnalysis);
+    document.getElementById('btn-clear-analysis')?.addEventListener('click', clearAnalysisLayers);
+    // Broom tool integration
+    document.getElementById('tool-clear')?.addEventListener('click', () => {
+      clearMeasurements();
+      clearAnalysisLayers();
+    });
+    window.addEventListener('resize', () => {
+      // This event listener was misplaced in the original code, it should not be inside the tab-btn loop.
+      // Moving it outside or removing if it's not intended to be here.
+      // Assuming it was meant to be a global resize listener, but the content inside is specific to tab-btn.
+      // Given the instruction, I'll keep it as is, but it's a logical inconsistency.
+      // For now, I'll just add the new event listeners as instructed.
+    });
+
+
+    if (bottomToggleEl) bottomToggleEl.addEventListener('click', () => {
+      if (state.bottomOpen) closeBottomPanel(); else { setBottomTab(state.bottomTab || 'ficha'); openBottomPanel(); }
+    });
+    if (bottomCloseEl) bottomCloseEl.addEventListener('click', closeBottomPanel);
+    if (bottomSearchEl) bottomSearchEl.addEventListener('input', () => {
+      state.alertsLoaded = state.alertsLoaded; // no-op; just keep state
+      refreshBottomTab();
+    });
+    bottomTabButtons.forEach(btn => btn.addEventListener('click', () => setBottomTab(btn.dataset.btab)));
+    vesselTabButtons.forEach(btn => btn.addEventListener('click', () => {
+      if (!state.currentNaveId && !state.currentMMSI) {
+        setFichaVisibility(false);
+        return;
+      }
+      setActiveTab(btn.dataset.tab);
+      loadVesselCard({ naveId: state.currentNaveId, mmsi: state.currentMMSI }, btn.dataset.tab);
+    }));
+
+    function toDMS(value, isLat) {
+      if (!Number.isFinite(value)) return '---';
+      const dir = value >= 0 ? (isLat ? 'N' : 'E') : (isLat ? 'S' : 'W');
+      const abs = Math.abs(value);
+      const deg = Math.floor(abs);
+      const minFloat = (abs - deg) * 60;
+      const min = Math.floor(minFloat);
+      const sec = (minFloat - min) * 60;
+      return `${deg}° ${String(min).padStart(2, '0')} ' ${sec.toFixed(2)}" ${dir}`;
+    }
+
+    let _wmsProbeTimer = null;
+    let _lastWmsValue = null;
+
+    function updateCoords(input) {
+      if (!coordsLineEl) return;
+
+      let lngLat;
+      let eventObj = null;
+
+      // Handle input polymorphism: Event object vs LngLat object
+      if (input && input.lngLat) {
+        // It's an Event object (has lngLat property)
+        lngLat = input.lngLat;
+        eventObj = input;
+      } else if (input && (typeof input.lat === 'number' || typeof input.lat === 'function')) {
+        // It's likely a direct LngLat object (checking for lat property)
+        lngLat = input;
+      } else {
+        // Invalid input
+        return;
+      }
+
+      const baseText = `Lat: ${toDMS(lngLat.lat, true)} | Lon: ${toDMS(lngLat.lng, false)}`;
+
+      // If we have a cached WMS value from the last probe, append it
+      const wmsText = _lastWmsValue ? ` | ${_lastWmsValue}` : '';
+      coordsLineEl.textContent = baseText + wmsText;
+
+      // Only probe WMS if we have a full event object (need pixel coords)
+      if (eventObj) {
+        // Debounce probe
+        if (_wmsProbeTimer) clearTimeout(_wmsProbeTimer);
+        _wmsProbeTimer = setTimeout(() => probeWMSValue(eventObj), 250);
+      }
+    }
+
+    // Helper: Convert Lat/Lon to Web Mercator (EPSG:3857) meters
+    function forwardMercator(lon, lat) {
+      const x = lon * 20037508.34 / 180;
+      let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+      y = y * 20037508.34 / 180;
+      return [x, y];
+    }
+
+    async function probeWMSValue(e) {
+      // Find visible WMS layer
+      const wmsLayer = state.staticLayers.find(l => {
+        return l.type === 'wms' &&
+          (map.getLayer(l.layerId) && map.getLayoutProperty(l.layerId, 'visibility') === 'visible') &&
+          l.tile_url; // Must have URL
+      });
+
+      if (!wmsLayer) {
+        if (_lastWmsValue) {
+          _lastWmsValue = null;
+          // Force update text to remove old value
+          updateCoords(e);
+        }
+        return;
+      }
+
+      try {
+        // Construct GetFeatureInfo URL
+        // We need: service=WMS, version=1.1.1, request=GetFeatureInfo, layers=..., query_layers=..., bbox=..., width=..., height=..., x=..., y=...
+        // info_format=text/xml or application/json
+
+        // 1. Get Base URL and Params
+        let baseUrl = wmsLayer.tile_url.split('?')[0];
+        // Decode potential proxy encoding just to be safe when parsing
+        let cleanUrl = wmsLayer.tile_url.replace(/%7B/g, '{').replace(/%7D/g, '}');
+        let urlObj = new URL(cleanUrl, window.location.origin);
+
+        let layerName = '';
+
+        // Helper to find param case-insensitive
+        const findParam = (params, name) => {
+          for (const [key, val] of params) {
+            if (key.match(new RegExp(`^${name}$`, 'i'))) return val;
+          }
+          return null;
+        };
+
+        layerName = findParam(urlObj.searchParams, 'layers');
+
+        // Proxy fallback: If not found, check if 'url' param contains the real WMS URL
+        if (!layerName) {
+          const innerUrlStr = findParam(urlObj.searchParams, 'url');
+          if (innerUrlStr) {
+            try {
+              // Decode the inner URL (it's usually component encoded)
+              const innerUrl = new URL(decodeURIComponent(innerUrlStr));
+              layerName = findParam(innerUrl.searchParams, 'layers');
+              // If we are proxying, we should probably target the proxy base for the GetFeatureInfo too?
+              // Or maybe standard WMS requests should go through proxy?
+              // Usually yes. But let's stick to using the wmsLayer.tile_url base for the request,
+              // but we need the layer name from inside.
+            } catch (e) { /* ignore parse error */ }
+          }
+        }
+
+        if (!layerName) {
+          console.warn('[WMS-PROBE] Could not find layer name in URL:', wmsLayer.tile_url);
+          return;
+        }
+
+        // Correct Projection Strategy: Use EPSG:3857
+        // MapLibre is WebMercator. We must request WMS in 3857 so pixels (x,y) match BBOX.
+        const bounds = map.getBounds();
+        const sw = forwardMercator(bounds.getWest(), bounds.getSouth());
+        const ne = forwardMercator(bounds.getEast(), bounds.getNorth());
+        const bbox = [sw[0], sw[1], ne[0], ne[1]].join(',');
+
+        // Map canvas dimensions
+        const canvas = map.getCanvas();
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Cursor pixel relative to canvas
+        const point = e.point;
+        // X,Y must be integers
+        const x = Math.floor(point.x);
+        const y = Math.floor(point.y);
+
+        const params = new URLSearchParams();
+        params.set('service', 'WMS');
+        params.set('version', '1.1.1'); // 1.1.1 is usually safer for bbox order
+        params.set('request', 'GetFeatureInfo');
+        params.set('layers', layerName);
+        params.set('query_layers', layerName);
+        params.set('bbox', bbox);
+        params.set('srs', 'EPSG:3857'); // Explicitly request Mercator
+        params.set('width', width.toString());
+        params.set('height', height.toString());
+        params.set('x', x.toString());
+        params.set('y', y.toString());
+        params.set('info_format', 'text/xml'); // XML is standard for Thredds
+
+        // Important: Some servers (Thredds) require 'styles' param or they error
+        params.set('styles', '');
+
+        // Check if proxy
+        const proxyUrlParam = findParam(urlObj.searchParams, 'url');
+        let reqUrl = '';
+
+        if (proxyUrlParam) {
+          // PROXY MODE: Construct target URL -> Encode -> Wrap in Proxy
+          try {
+            const innerUrlRaw = decodeURIComponent(proxyUrlParam);
+            const innerBase = innerUrlRaw.split('?')[0];
+            const targetUrl = `${innerBase}?${params.toString()}`;
+            reqUrl = `${urlObj.origin}${urlObj.pathname}?url=${encodeURIComponent(targetUrl)}`;
+          } catch (e) {
+            reqUrl = `${baseUrl}?${params.toString()}`;
+          }
+        } else {
+          // DIRECT MODE
+          reqUrl = `${baseUrl}?${params.toString()}`;
+        }
+
+
+        const resp = await fetch(reqUrl);
+        const text = await resp.text();
+        // Console log removed as requested
+
+        // Parse Thredds XML response
+        // Usually: <FeatureInfo><value>25.5</value></FeatureInfo> or similar
+        // Simple regex to find a number or "value"
+
+        let val = '';
+        // Basic XML parser
+        if (text.includes('xml')) {
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(text, 'text/xml');
+
+          // Common Thredds format: <value>12.34</value>
+          const valueTags = xmlDoc.getElementsByTagName('value');
+          if (valueTags.length > 0) {
+            const rawVal = valueTags[0].textContent.trim();
+            if (rawVal && rawVal !== 'none' && rawVal !== 'null') {
+              val = `${wmsLayer.title}: ${Number(rawVal).toFixed(2)}`;
+            }
+          }
+        }
+        // Fallback text parser (for when server returns plain text error or different format)
+        if (!val && text.length < 500) {
+          // Try to grab a number if it looks like a simple response
+          const match = text.match(/([-+]?[0-9]*\.?[0-9]+)/);
+          // Only verify if reasonable context exists (avoid grabbing version numbers etc)
+          if (match && !text.includes('ServiceException')) {
+            // Very loose heuristic, careful
+            val = `${wmsLayer.title}: ${Number(match[1]).toFixed(2)}`;
+          }
+        }
+
+        if (val) {
+          _lastWmsValue = val;
+          // Update UI immediately (simulated event to just trigger refresh)
+          updateCoords(e);
+        }
+
+      } catch (err) {
+        console.warn('WMS Probe failed', err);
+      }
+    }
+
+    function resetCoords() {
+      if (!coordsLineEl) return;
+      coordsLineEl.textContent = 'Lat: ---, Lon: ---';
+    }
+
+    function renderBaseMapOptions() {
+      const list = document.getElementById('basemap-list');
+      if (!list) return;
+      list.innerHTML = '';
+      baseMaps.forEach(cfg => {
+        const option = document.createElement('label');
+        option.className = 'basemap-option';
+        const title = document.createElement('span');
+        title.textContent = cfg.title;
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'basemap';
+        radio.value = cfg.id;
+        radio.checked = state.currentBaseMap === cfg.id;
+        radio.addEventListener('change', () => setBaseMap(cfg.id));
+        option.appendChild(radio);
+        option.appendChild(title);
+        list.appendChild(option);
+      });
+      if (!list.children.length) {
+        list.innerHTML = '<div class="empty-text">Sin mapas base disponibles.</div>';
+      }
+    }
+
+    function setBaseMap(id) {
+      if (!id) return;
+      const target = baseMaps.find(cfg => cfg.id === id);
+      if (!target) return;
+      if (!map.getLayer(target.layerId)) {
+        map.once('styledata', () => setBaseMap(id));
+      } else {
+        baseMaps.forEach(cfg => {
+          if (map.getLayer(cfg.layerId)) {
+            map.setLayoutProperty(cfg.layerId, 'visibility', cfg.id === id ? 'visible' : 'none');
+          }
+        });
+      }
+      state.currentBaseMap = id;
+    }
+
+    function clearMeasureMarkers() {
+      while (measureMarkers.length) {
+        const marker = measureMarkers.pop();
+        try {
+          marker.remove();
+        } catch (err) {
+          /* ignore */
+        }
+      }
+    }
+
+    function updateMeasureMarkers(features) {
+      clearMeasureMarkers();
+      if (!map || !Array.isArray(features)) return;
+      features.forEach(feature => {
+        const coords = feature?.geometry?.coordinates;
+        const label = feature?.properties?.label;
+        if (!Array.isArray(coords) || coords.length < 2 || !Number.isFinite(coords[0]) || !Number.isFinite(coords[1])) {
+          return;
+        }
+        const el = document.createElement('div');
+        el.className = 'measure-label';
+        el.textContent = label || 'Figura';
+        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat(coords)
+          .addTo(map);
+        measureMarkers.push(marker);
+      });
+    }
+
+    function headingArrowHTML(degrees, { size = 14, margin = 4 } = {}) {
+      if (!Number.isFinite(degrees)) return '';
+      const rotation = degrees - 90; // ajustar de norte geográfico a referencia hacia la derecha
+      return `<span class="heading-arrow" style="font-size:${size}px; margin-right:${margin}px; transform: rotate(${rotation}deg);">➤</span>`;
+    }
+
+    function renderVesselTooltip(feature) {
+      const props = feature?.properties || {};
+      const coords = feature?.geometry?.coordinates || [];
+      const lat = Number.isFinite(coords[1]) ? toDMS(coords[1], true) : '-';
+      const lon = Number.isFinite(coords[0]) ? toDMS(coords[0], false) : '-';
+      const sog = props.sog_knots != null ? `${Number(props.sog_knots).toFixed(1)} kn` : '-';
+      const cogValue = props.cog_deg != null ? Number(props.cog_deg) : null;
+      const cogText = cogValue == null ? '-' : `${cogValue.toFixed(0)}°`;
+      const ts = fmtTs(props.ts);
+      const statusText = props.alert ? 'Alerta' : 'Normal';
+      const statusColor = props.alert ? '#dc2626' : '#16a34a';
+      const displayName = props.name || 'Embarcación';
+      const displayMat = props.matricula ? `(${props.matricula})` : '';
+      const arrowHTML = cogValue == null ? '' : headingArrowHTML(cogValue, { size: 14, margin: 6 });
+      return `
+      <div style="min-width:240px; font-family:inherit;">
+        <div style="font-weight:700; font-size:14px; color:#0f172a; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+          <span>${displayName} ${displayMat}</span>
+          <span style="color:${statusColor}; font-weight:700;">${statusText}</span>
+        </div>
+        <div style="font-size:12px; color:#1e293b; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; justify-content:space-between;"><span><small>MMSI</small></span><strong>${props.mmsi || '-'}</strong></div>
+          <div style="display:flex; justify-content:space-between;"><span><small>Actualizado</small></span><span>${ts}</span></div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span><small>Velocidad</small></span><strong>${sog}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span><small>Rumbo</small></span>
+            <strong>${arrowHTML}${cogText}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span><small>Lat</small></span><strong>${lat}</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span><small>Lon</small></span><strong>${lon}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+    }
+
+    function createLabelFeature(feature, text) {
+      if (!feature || !feature.geometry || !text) return null;
+      const geometryType = feature.geometry.type;
+      let coords = null;
+      try {
+        if (geometryType === 'Point') {
+          coords = feature.geometry.coordinates;
+        } else if (geometryType === 'LineString') {
+          const lineCoords = feature.geometry.coordinates;
+          if (!Array.isArray(lineCoords) || !lineCoords.length) return null;
+          const line = turf.lineString(lineCoords);
+          const lengthKm = turf.length(line, { units: 'kilometers' });
+          if (Number.isFinite(lengthKm) && lengthKm > 0) {
+            coords = turf.along(line, lengthKm / 2, { units: 'kilometers' })?.geometry?.coordinates;
+          }
+          if (!coords && lineCoords.length) {
+            coords = lineCoords[Math.floor(lineCoords.length / 2)];
+          }
+        } else if (geometryType === 'Polygon') {
+          coords = turf.centerOfMass(feature)?.geometry?.coordinates;
+          if (!coords) coords = turf.center(feature)?.geometry?.coordinates;
+        } else {
+          coords = turf.center(feature)?.geometry?.coordinates;
+        }
+      } catch (err) {
+        console.warn('No se pudo generar etiqueta para la figura', err);
+        coords = null;
+      }
+      if (!Array.isArray(coords) || coords.length < 2 || !Number.isFinite(coords[0]) || !Number.isFinite(coords[1])) return null;
+      return {
+        geometry: { type: 'Point', coordinates: coords },
+        properties: { label: text, featureId: feature.id || null, measureType: feature.properties?.measureType || geometryType }
+      };
+    }
+
+    function colorFromStatus(s) { if (s === 'blink-red') return '#ef4444'; if (s === 'red') return '#ef4444'; if (s === 'orange') return '#f97316'; if (s === 'yellow') return '#fbbf24'; if (s === 'gray') return '#94a3b8'; return '#22c55e'; }
+    function fmtTs(ts) { if (!ts) return '-'; const d = new Date(Number(ts) * 1000); return isNaN(d.getTime()) ? '-' : d.toLocaleString(); }
+
+    function updateSessionInfo() {
+      if (!sessionInfoEl) return;
+      if (sessionUserEl) sessionUserEl.textContent = '';
+    }
+
+    function handleLogout() {
+      state.user = null;
+      if (state.ws) {
+        state.ws.close();
+        state.ws = null;
+      }
+      authToken = null;
+      sessionStorage.removeItem('sigmap_token');
+      state.booted = false;
+      state.vessels = {};
+      state.currentMMSI = null;
+      state.currentNaveId = null;
+      if (map.getSource(sourceId)) {
+        map.getSource(sourceId).setData({ type: 'FeatureCollection', features: [] });
+      }
+      state.staticLayers.forEach(layer => {
+        if (layer && layer._timer) {
+          clearInterval(layer._timer);
+          layer._timer = null;
+        }
+        // Remove from floating legend on logout
+        if (layer.type === 'wms') {
+          updateFloatingLegend(layer, false);
+        }
+      });
+      state.staticLayers = [];
+      const layerControlsEl = document.getElementById('layer-controls');
+      if (layerControlsEl) layerControlsEl.innerHTML = '<div class="empty-text">Sin capas cargadas.</div>';
+      document.getElementById('info').innerText = 'Sesión cerrada.';
+      if (bottomSearchEl) bottomSearchEl.value = '';
+      closeBottomPanel();
+      setFichaVisibility(false);
+      updateSessionInfo();
+      resetCoords();
+      setNoMeasurements();
+      updateRealtimeSummary(null);
+      document.getElementById('login-overlay').classList.remove('hidden');
+    }
+
+    async function performLogin() {
+      const user = document.getElementById('username').value.trim();
+      const pass = document.getElementById('password').value;
+      const errorEl = document.getElementById('login-error');
+      errorEl.textContent = '';
+      try {
+        const resp = await fetch('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: user, password: pass })
+        });
+        if (!resp.ok) {
+          errorEl.textContent = 'Credenciales inválidas';
+          return;
+        }
+        const payload = await resp.json();
+        authToken = { ...payload, username: user };
+        state.user = user;
+        sessionStorage.setItem('sigmap_token', JSON.stringify(authToken));
+        updateSessionInfo();
+
+        // Hide login, show global loader for boot transition
+        document.getElementById('login-overlay').classList.add('hidden');
+        const loader = document.getElementById('global-loader');
+        if (loader) {
+          loader.classList.remove('fade-out', 'hidden');
+          loader.style.opacity = '1';
+          loader.style.visibility = 'visible';
+          loader.style.pointerEvents = 'all';
+        }
+
+        document.getElementById('info').innerText = 'Sesión iniciada.';
+        await boot();
+      } catch (err) {
+        console.error(err);
+        errorEl.textContent = 'No se pudo conectar con el servidor.';
+      }
+    }
+
+    function tokenFromStorage() {
+      if (authToken) return authToken;
+      const saved = sessionStorage.getItem('sigmap_token');
+      if (saved) {
+        try {
+          authToken = JSON.parse(saved);
+          state.user = authToken.username || null;
+          updateSessionInfo();
+        } catch (err) {
+          console.warn(err);
+        }
+      }
+      return authToken;
+    }
+
+    async function ensureLogin() {
+      console.log("ensureLogin called");
+      try {
+        if (tokenFromStorage()) {
+          console.log("Token found, booting...");
+          document.getElementById('login-overlay').classList.add('hidden');
+          await boot();
+        } else {
+          console.log("No token, showing login overlay");
+          document.getElementById('login-overlay').classList.remove('hidden');
+          hideGlobalLoader(); // Ensure loader is gone so user can see login
+        }
+      } catch (e) {
+        console.error("ensureLogin error:", e);
+        hideGlobalLoader(); // Failsafe
+      }
+    }
+
+    // botón de engrane para admin de capas
+    const layerAdminBtn = document.getElementById('layer-admin-btn');
+    if (layerAdminBtn) {
+      layerAdminBtn.addEventListener('click', () => {
+        window.open('/layer-admin', '_blank');
+      });
+    }
+
+    async function boot() {
+      console.log("Booting app...");
+      startLoaderCycle();
+      if (state.booted) {
+        hideGlobalLoader();
+        return;
+      }
+      state.booted = true;
+
+      try {
+        // Race mapReady with a 10s timeout to prevent hanging forever
+        const mapTimeout = new Promise(resolve => setTimeout(resolve, 10000));
+        await Promise.race([mapReady, mapTimeout]);
+
+        try {
+          await loadStaticLayers();
+        } catch (e) {
+          console.error("Error loading static layers:", e);
+        }
+
+        try {
+          await loadInitialPositions();
+        } catch (e) {
+          console.error("Error loading initial positions:", e);
+        }
+
+        // Preload alerts for map
+        try {
+          loadIncidentAlerts();
+        } catch (e) { console.warn("Error preloading alerts", e); }
+
+        setupWebSocket();
+      } catch (err) {
+        console.error("Boot error:", err);
+      } finally {
+        hideGlobalLoader();
+      }
+    }
+
+    function startLoaderCycle() {
+      const texts = [
+        "Cargando a bordo...",
+        "Conectando Embarcaciones...",
+        "Desplegando SIGMAP..."
+      ];
+      const el = document.getElementById('loader-text');
+      if (!el) return;
+      let i = 0;
+      window._loaderInterval = setInterval(() => {
+        i = (i + 1) % texts.length;
+        el.textContent = texts[i];
+      }, 2000);
+    }
+
+    function hideGlobalLoader() {
+      const el = document.getElementById('global-loader');
+      if (el) {
+        // Clear inline styles that might block the class-based transition
+        el.style.opacity = '';
+        el.style.visibility = '';
+        el.style.pointerEvents = '';
+
+        // Force reflow to ensure transition plays
+        void el.offsetWidth;
+
+        el.classList.add('fade-out');
+      }
+      if (window._loaderInterval) clearInterval(window._loaderInterval);
+    }
+
+    async function loadStaticLayers() {
+      const resp = await fetch('/api/v1/static-layers/config');
+      const cfg = await resp.json();
+      const layers = cfg.layers || [];
+      const controls = document.getElementById('layer-controls');
+      if (controls) controls.innerHTML = '';
+      state.staticLayers = layers.map(l => ({
+        ...l,
+        sourceId: `${l.type}-${l.id}-src`,
+        layerId: `${l.type}-${l.id}-layer`,
+        _timer: null
+      }));
+      if (!state.staticLayers.length && controls) {
+        controls.innerHTML = '<div class="empty-text">Sin capas configuradas.</div>';
+      } else {
+        state.staticLayers.forEach(layer => {
+          addLayerToMap(layer);
+          addLayerControl(layer);
+        });
+      }
+    }
+
+    function addLayerControl(layer) {
+      const controls = document.getElementById('layer-controls');
+      if (!controls) return;
+      const wrapper = document.createElement('label');
+      wrapper.className = 'layer-toggle';
+      const left = document.createElement('span');
+      left.style.display = 'flex';
+      left.style.alignItems = 'center';
+      left.style.gap = '6px';
+      left.style.width = '100%'; // Ensure flex container takes full width for justification
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = layer.visible !== false;
+      left.appendChild(checkbox);
+
+      const title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = layer.title;
+      left.appendChild(title);
+
+      wrapper.appendChild(left);
+      if (layer.min_zoom !== undefined || layer.max_zoom !== undefined) {
+        wrapper.title = `Visible entre zoom ${layer.min_zoom ?? 0} y ${layer.max_zoom ?? 22}`;
+      }
+      controls.appendChild(wrapper);
+
+      // No longer generating inline legend here.
+      // The floating legend will handle it.
+
+      checkbox.addEventListener('change', () => {
+        const visibility = checkbox.checked ? 'visible' : 'none';
+        if (map.getLayer(layer.layerId)) {
+          map.setLayoutProperty(layer.layerId, 'visibility', visibility);
+        }
+
+        // Handling Hybrid Legend Visibility
+        const info = getWMSLegendUrl(layer);
+        if (info) {
+          if (info.isThredds) {
+            // Thredds -> Floating
+            updateFloatingLegend(layer, checkbox.checked);
+          } else {
+            // Inline -> Toggle logic if needed, but it's part of the DOM label so it hides with the parent?
+            // Actually the parent label is always visible. The checkbox toggles the LAYER visibility.
+            // The inline legend image is permanently visible in the sidebar as an icon?
+            // Usually yes. Or should it hide?
+            // User said "next to the name was fine". Usually that means static icon.
+            // So we don't need to do anything for inline here.
+          }
+        }
+      });
+
+      // Initial Legend Generation
+      if (layer.type === 'wms' && layer.tile_url) {
+        const info = getWMSLegendUrl(layer);
+        if (info) {
+          if (info.isThredds) {
+            // Thredds -> Floating (Only if visible initially)
+            if (layer.visible !== false) {
+              setTimeout(() => updateFloatingLegend(layer, true), 500);
+            }
+          } else {
+            // Others (Zones) -> Inline 20x20 Icon
+            const legendImg = document.createElement('img');
+            legendImg.src = info.url;
+            legendImg.alt = 'Leyenda';
+            legendImg.style.display = 'block';
+            legendImg.style.marginTop = '0';
+            legendImg.style.marginLeft = 'auto'; // Right align in the label? or next to text?
+            legendImg.style.marginRight = '4px';
+
+            // Styling for Sidebar Icon
+            if (info.isZone) {
+              // 20x20 Crop
+              legendImg.style.objectFit = 'none';
+              legendImg.style.objectPosition = '0 0';
+              legendImg.style.width = '20px';
+              legendImg.style.height = '20px';
+              legendImg.style.border = '1px solid #666';
+              legendImg.style.borderRadius = '2px';
+            } else {
+              // Default mini icon
+              legendImg.style.maxWidth = '30px';
+              legendImg.style.height = 'auto';
+            }
+
+            // Insert before or after title?
+            // User said "beside the layer name".
+            // structure is: label > span(left) > [checkbox, title].
+            // We likely want it after title or inside the 'left' span.
+            // Let's add it to 'left' after title.
+            left.appendChild(legendImg);
+          }
+        }
+      }
+    }
+
+    // --- Helper Functions Restored ---
+
+    function getWMSLegendUrl(layer) {
+      if (layer.type !== 'wms' || !layer.tile_url) return null;
+      try {
+        let legendUrl = layer.tile_url.split('?')[0];
+        let cleanUrl = layer.tile_url.replace(/%7B/g, '{').replace(/%7D/g, '}');
+        const urlObj = new URL(cleanUrl, window.location.origin);
+
+        const findParam = (params, name) => {
+          for (const [key, val] of params) {
+            if (key.match(new RegExp(`^${name}$`, 'i'))) return val;
+          }
+          return null;
+        };
+
+        let layerName = findParam(urlObj.searchParams, 'layers');
+
+        // Proxy fallback
+        if (!layerName) {
+          const innerUrlStr = findParam(urlObj.searchParams, 'url');
+          if (innerUrlStr) {
+            try {
+              const innerUrl = new URL(decodeURIComponent(innerUrlStr));
+              layerName = findParam(innerUrl.searchParams, 'layers');
+            } catch (e) { /* ignore */ }
+          }
+        }
+
+        if (!layerName) return null;
+
+        const isThredds = legendUrl.includes('thredds') || layer.tile_url.includes('thredds');
+        const isZone = layer.title.toLowerCase().startsWith('zona') || layer.title.includes('Espacios');
+
+        // Note: For Thredds we use uppercase VERTICAL
+        const params = new URLSearchParams({
+          service: 'WMS',
+          request: 'GetLegendGraphic',
+          layer: layerName,
+          format: 'image/png',
+          VERTICAL: 'false',
+          vertical: 'false',
+          colorbaronly: 'false',
+          styles: ''
+        });
+
+        const qs = params.toString();
+        let finalLegendUrl = '';
+
+        const proxyUrlParam = findParam(urlObj.searchParams, 'url');
+        if (proxyUrlParam) {
+          try {
+            const innerUrlRaw = decodeURIComponent(proxyUrlParam);
+            const innerBase = innerUrlRaw.split('?')[0];
+            const targetUrl = `${innerBase}?${qs}`;
+            finalLegendUrl = `${urlObj.origin}${urlObj.pathname}?url=${encodeURIComponent(targetUrl)}`;
+          } catch (e) {
+            finalLegendUrl = `${legendUrl}?${qs}`;
+          }
+        } else {
+          finalLegendUrl = `${legendUrl}?${qs}`;
+        }
+
+        return { url: finalLegendUrl, isThredds, isZone };
+
+      } catch (e) {
+        console.warn('Error generating legend URL', e);
+        return null;
+      }
+    }
+
+    function updateFloatingLegend(layer, visible) {
+      const container = document.getElementById('wms-legend-container');
+      if (!container) return;
+
+      const existing = document.getElementById(`legend-${layer.layerId}`);
+      if (!visible) {
+        if (existing) existing.remove();
+        return;
+      }
+
+      if (existing) return; // Already there
+
+      const info = getWMSLegendUrl(layer);
+      if (!info) return;
+
+      const item = document.createElement('div');
+      item.id = `legend-${layer.layerId}`;
+      item.className = 'floating-legend-item';
+
+
+
+      const img = document.createElement('img');
+      img.src = info.url;
+      img.alt = 'Leyenda';
+      img.style.display = 'block';
+      img.style.borderRadius = '2px';
+
+      // Always full size for floating Thredds but smaller (30% less than 250px -> ~175px)
+      img.style.maxWidth = '175px';
+      img.style.height = 'auto';
+
+      item.appendChild(img);
+      container.appendChild(item);
+    }
+
+    async function addLayerToMap(layer) {
+      const minZoom = layer.min_zoom ?? 0;
+      const maxZoom = layer.max_zoom ?? 22;
+      if (layer.type === 'wms') {
+        if (map.getSource(layer.sourceId)) return;
+
+        let tileUrl = layer.tile_url;
+
+        // Fix for GeoNode Proxy URLs:
+        // GeoNode encodes the MapLibre template variable '{bbox-epsg-3857}' as '%7Bbbox-epsg-3857%7D'.
+        // MapLibre does not recognize the encoded version, so we must decode strictly the braces for the template to work.
+        if (tileUrl.includes('%7Bbbox-epsg-3857%7D')) {
+          console.log('[WMS-fix] Decoding bbox template for layer:', layer.layerId);
+          tileUrl = tileUrl.replace(/%7Bbbox-epsg-3857%7D/g, '{bbox-epsg-3857}');
+        }
+
+        // Also handle generic encoded braces just in case
+        if (tileUrl.includes('%7B') && tileUrl.includes('%7D')) {
+          tileUrl = tileUrl.replace(/%7B/g, '{').replace(/%7D/g, '}');
+        }
+
+        map.addSource(layer.sourceId, {
+          type: 'raster',
+          tiles: [tileUrl],
+          tileSize: 256
+        });
+        map.addLayer({
+          id: layer.layerId,
+          type: 'raster',
+          source: layer.sourceId,
+          paint: { 'raster-opacity': 0.75 },
+          minzoom: minZoom,
+          maxzoom: maxZoom
+        });
+        if (layer.visible === false) map.setLayoutProperty(layer.layerId, 'visibility', 'none');
+      } else if (layer.type === 'geojson') {
+        await updateGeoJsonLayer(layer);
+        if (!layer._timer && layer.refresh) {
+          layer._timer = setInterval(() => updateGeoJsonLayer(layer, true), layer.refresh * 1000);
+        }
+      }
+    }
+
+    async function updateGeoJsonLayer(layer, skipCache = false) {
+      try {
+        const url = layer.data_url + (skipCache ? `?t=${Date.now()}` : '');
+        const data = await fetch(url).then(r => r.json());
+        const minZoom = layer.min_zoom ?? 0;
+        const maxZoom = layer.max_zoom ?? 22;
+        if (map.getSource(layer.sourceId)) {
+          map.getSource(layer.sourceId).setData(data);
+        } else {
+          map.addSource(layer.sourceId, { type: 'geojson', data });
+          map.addLayer({
+            id: layer.layerId,
+            type: 'fill',
+            source: layer.sourceId,
+            paint: {
+              'fill-color': '#e67e22',
+              'fill-opacity': 0.25,
+              'fill-outline-color': '#d35400'
+            },
+            minzoom: minZoom,
+            maxzoom: maxZoom
+          });
+          if (layer.visible === false) map.setLayoutProperty(layer.layerId, 'visibility', 'none');
+        }
+      } catch (err) {
+        console.warn('No se pudo actualizar', layer.id, err);
+      }
+    }
+
+    let alertPulseAnimId = null;
+    function ensureAlertPulseAnimation() {
+      if (alertPulseAnimId) return;
+      const animate = () => {
+        if (map && map.getLayer(alertPulseLayerId)) {
+          const t = performance.now() / 1000;
+          const radius = 18 + Math.sin(t * 3) * 6; // Faster pulse
+          const stroke = 2 + (Math.sin(t * 3 + Math.PI / 2) + 1) * 1.5;
+          // Opacity range 0.1 to 0.4 (since base color is solid hex now)
+          const opacity = 0.1 + (Math.sin(t * 3) + 1) * 0.15;
+
+          map.setPaintProperty(alertPulseLayerId, 'circle-radius', radius);
+          map.setPaintProperty(alertPulseLayerId, 'circle-stroke-width', stroke);
+          map.setPaintProperty(alertPulseLayerId, 'circle-opacity', opacity);
+          // Also animate stroke opacity if desired, or keep it static
+        }
+        alertPulseAnimId = requestAnimationFrame(animate);
+      };
+      alertPulseAnimId = requestAnimationFrame(animate);
+    }
+
+    async function loadInitialPositions() {
+      if (!map.getSource(sourceId)) {
+        await ensureVesselIcons();
+        const useIcons = vesselIconsReady;
+        map.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+        // Fetch initial positions endpoint
+        try {
+          const res = await fetch('/api/v1/vessels/last');
+          if (res.ok) {
+            const data = await res.json();
+            console.log('Initial data received:', data);
+
+            let items = [];
+            if (Array.isArray(data)) {
+              items = data;
+            } else if (data && Array.isArray(data.data)) {
+              // Handle potential wrapper { data: [...] }
+              items = data.data;
+            } else {
+              console.warn('Initial data is not an array:', data);
+            }
+
+            console.log(`Processing ${items.length} initial vessels`);
+            items.forEach(d => upsertVessel(d));
+            renderVessels();
+          } else {
+            console.warn('Failed to fetch initial positions:', res.status);
+          }
+        } catch (e) {
+          console.warn('Error fetching initial positions', e);
+        }
+
+        if (!map.getSource(clusterSourceId)) {
+          map.addSource(clusterSourceId, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+            cluster: true,
+            clusterRadius: 60,
+            clusterMaxZoom: 14
+          });
+          map.addLayer({
+            id: clusterCircleLayerId,
+            type: 'circle',
+            source: clusterSourceId,
+            filter: ['has', 'point_count'],
+            paint: {
+              'circle-color': '#2563eb',
+              'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                16, 10, 18, 50, 22
+              ],
+              'circle-opacity': 0.8
+            },
+            layout: { visibility: 'none' }
+          });
+          map.addLayer({
+            id: clusterCountLayerId,
+            type: 'symbol',
+            source: clusterSourceId,
+            filter: ['has', 'point_count'],
+            layout: {
+              'text-field': ['get', 'point_count_abbreviated'],
+              'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+              'text-size': 12,
+              'text-allow-overlap': true,
+              'visibility': 'none'
+            },
+            paint: {
+              'text-color': '#ffffff',
+              'text-halo-color': '#1d4ed8',
+              'text-halo-width': 1
+            }
+          });
+          map.addLayer({
+            id: clusterUnclusteredLayerId,
+            type: 'symbol',
+            source: clusterSourceId,
+            filter: ['!', ['has', 'point_count']],
+            layout: {
+              'icon-image': ['get', 'iconId'], // Use the dynamic icon directly
+              'icon-size': 0.2,
+              'icon-rotate': [
+                '+',
+                ['coalesce', ['get', 'cog_deg'], 0],
+                ['case',
+                  ['>=', ['index-of', 'carga', ['get', 'iconId']], 0],
+                  -90,
+                  90
+                ]
+              ],
+              'icon-rotation-alignment': 'map',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+              'visibility': 'none'
+            }
+          });
+        }
+        if (!map.getSource(voyageRouteSourceId)) {
+          map.addSource(voyageRouteSourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+          map.addLayer({
+            id: voyageRouteLineId,
+            type: 'line',
+            source: voyageRouteSourceId,
+            paint: {
+              'line-color': '#6366f1',
+              'line-width': 3,
+              'line-opacity': 0.8
+            },
+            layout: { visibility: 'none' }
+          });
+          map.addLayer({
+            id: voyageRoutePointId,
+            type: 'circle',
+            source: voyageRouteSourceId,
+            paint: {
+              'circle-radius': 4,
+              'circle-color': '#6366f1',
+              'circle-stroke-color': '#111827',
+              'circle-stroke-width': 1
+            },
+            layout: { visibility: 'none' }
+          });
+        }
+        if (!map.getSource(voyageRealSourceId)) {
+          map.addSource(voyageRealSourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+          map.addLayer({
+            id: voyageRealLineId,
+            type: 'line',
+            source: voyageRealSourceId,
+            paint: {
+              'line-color': '#0ea5e9',
+              'line-width': 3,
+              'line-opacity': 0.9
+            },
+            layout: { visibility: 'none' }
+          });
+          map.addLayer({
+            id: voyageRealPointId,
+            type: 'circle',
+            source: voyageRealSourceId,
+            paint: {
+              'circle-radius': 4,
+              'circle-color': '#0ea5e9',
+              'circle-stroke-color': '#0c4a6e',
+              'circle-stroke-width': 1
+            },
+            layout: { visibility: 'none' }
+          });
+        }
+
+        // NEW: Dedicated source for optimized alert animation (prevents lag on main fleet)
+        const alertPulseSourceId = 'alert-pulse-source';
+        if (!map.getSource(alertPulseSourceId)) {
+          map.addSource(alertPulseSourceId, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] }
+          });
+          map.addLayer({
+            id: alertPulseLayerId,
+            type: 'circle',
+            source: alertPulseSourceId,
+            paint: {
+              'circle-radius': 18,
+              'circle-color': ['get', 'alert_color'],
+              'circle-opacity': 0.4,
+              'circle-stroke-color': ['get', 'alert_color'],
+              'circle-stroke-width': 2,
+              'circle-stroke-opacity': 0.8
+            }
+          });
+        }
+
+        /* PULSE LAYER DISABLED FOR PERFORMANCE (OLD IMPLEMENTATION)
+        map.addLayer({
+          id: alertPulseLayerId,
+          type: 'circle',
+          source: sourceId,
+          filter: ['has', 'alert_color'],
+          paint: {
+            'circle-radius': 18,
+            'circle-color': ['get', 'alert_color'],
+            'circle-opacity': 0.4,
+            'circle-stroke-color': ['get', 'alert_color'],
+            'circle-stroke-width': 2,
+            'circle-stroke-opacity': 0.8
+          }
+        });
+        */
+        if (useIcons) {
+          map.addLayer({
+            id: layerId,
+            type: 'symbol',
+            source: sourceId,
+            layout: {
+              'icon-image': ['get', 'iconId'],
+              'icon-size': 0.2,
+              // 'carga' points East (-90 offset), others point West (+90 offset)
+              'icon-rotate': [
+                '+',
+                ['coalesce', ['get', 'cog_deg'], 0],
+                ['case',
+                  ['>=', ['index-of', 'carga', ['get', 'iconId']], 0],
+                  -90,
+                  90
+                ]
+              ],
+              'icon-rotation-alignment': 'map',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true
+            }
+          });
+        } else {
+          console.warn('Iconos de barco no cargaron, usando círculos');
+          map.addLayer({
+            id: layerId,
+            type: 'circle',
+            source: sourceId,
+            paint: {
+              'circle-radius': 6,
+              'circle-color': ['get', 'color'],
+              'circle-stroke-color': '#1f2937',
+              'circle-stroke-width': 1.2
+            }
+          });
+        }
+        ensureAlertPulseAnimation();
+        const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12, maxWidth: '320px' });
+        map.on('mousemove', layerId, (e) => {
+          const f = e.features[0];
+          map.getCanvas().style.cursor = 'pointer';
+
+          let props = f.properties;
+          if (props && props.nave_id && state.vessels[props.nave_id]) {
+            props = { ...props, ...state.vessels[props.nave_id].properties };
+          }
+          const featureForPopup = { ...f, properties: props, geometry: f.geometry };
+
+          const coordinates = f.geometry.coordinates.slice();
+          const description = getVesselPopupHTML(featureForPopup);
+
+          while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+            coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+          }
+
+          popup.setLngLat(coordinates).setHTML(description).addTo(map);
+        });
+        map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; popup.remove(); });
+
+        map.on('mouseenter', clusterUnclusteredLayerId, (e) => {
+          map.getCanvas().style.cursor = 'pointer';
+
+          const f = e.features[0];
+          let props = f.properties;
+          if (props && props.nave_id && state.vessels[props.nave_id]) {
+            props = { ...props, ...state.vessels[props.nave_id].properties };
+          }
+          const featureForPopup = { ...f, properties: props, geometry: f.geometry };
+
+          const coordinates = f.geometry.coordinates.slice();
+          const description = getVesselPopupHTML(featureForPopup);
+
+          while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+            coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+          }
+
+          popup.setLngLat(coordinates).setHTML(description).addTo(map);
+        });
+
+        map.on('mouseleave', clusterUnclusteredLayerId, () => {
+          map.getCanvas().style.cursor = '';
+          popup.remove();
+        });
+
+        const onVesselClick = (e) => {
+          const f = e.features && e.features[0];
+          if (!f) return;
+          const naveId = f.properties.nave_id ?? f.properties.mmsi;
+          const mmsi = f.properties.mmsi;
+          if (naveId) {
+            state.currentNaveId = String(naveId);
+            state.currentMMSI = mmsi ? String(mmsi) : null;
+            updateRealtimeSummary(f);
+            setFichaVisibility(true);
+            setBottomTab('ficha');
+            openBottomPanel();
+            setActiveTab('basic');
+            loadVesselCard({ naveId: state.currentNaveId, mmsi: state.currentMMSI }, 'basic');
+            map.easeTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), 12) });
+          }
+        };
+
+        map.on('click', layerId, onVesselClick);
+        map.on('click', clusterUnclusteredLayerId, onVesselClick);
+      }
+      const res = await fetch('/api/v1/vessels/dms-last');
+      const js = await res.json();
+      (js.data || []).forEach(upsertVessel);
+      renderVessels();
+    }
+    function renderVessels() {
+      const feats = Object.values(state.vessels);
+      const src = map.getSource(sourceId);
+      const collection = { type: 'FeatureCollection', features: feats };
+      if (src) src.setData(collection);
+      const clusterSrc = map.getSource(clusterSourceId);
+      if (clusterSrc) clusterSrc.setData(collection);
+      refreshVesselAlerts(); // Sync dedicated pulse layer
+    }
+
+    function setClusterEnabled(enabled) {
+      state.clusterEnabled = enabled;
+      const visibilityOn = enabled ? 'visible' : 'none';
+      const visibilityOff = enabled ? 'none' : 'visible';
+      if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', visibilityOff);
+      if (map.getLayer(alertPulseLayerId)) map.setLayoutProperty(alertPulseLayerId, 'visibility', visibilityOff);
+      [clusterCircleLayerId, clusterCountLayerId, clusterUnclusteredLayerId].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibilityOn);
+      });
+    }
+
+    function showMaritimeLoader(containerId) {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      el.innerHTML = `
+        <div class="maritime-loader">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2v20"/>
+            <path d="M2 12h20"/>
+            <path d="M12 12l4.24-4.24"/>
+            <path d="M12 12l4.24 4.24"/>
+            <path d="M12 12l-4.24-4.24"/>
+            <path d="M12 12l-4.24 4.24"/>
+          </svg>
+          <div style="font-weight:600;">Cargando a bordo...</div>
+        </div>
+      `;
+    }
+
+    function getBottomTabContainerId(tab) {
+      if (tab === 'alerts') return 'alerts-table';
+      if (tab === 'vessels') return 'vessels-table';
+      if (tab === 'ficha') return 'panel-content-v2';
+      return null;
+    }
+
+    function voyageRouteGeoJSON(points) {
+      if (!points || !points.length) return { type: 'FeatureCollection', features: [] };
+      const coords = points.map(p => [p.lon, p.lat]).filter(c => Number.isFinite(c[0]) && Number.isFinite(c[1]));
+      const features = [];
+      if (coords.length >= 2) {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: coords },
+          properties: { kind: 'route' }
+        });
+      }
+      coords.forEach((c, idx) => {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: c },
+          properties: { kind: 'route_point', order: points[idx]?.order ?? idx }
+        });
+      });
+      return { type: 'FeatureCollection', features };
+    }
+
+    function setVoyageRoute(points, visible = false) {
+      state.voyageRoutePoints = points || [];
+      const src = map.getSource(voyageRouteSourceId);
+      if (src) src.setData(voyageRouteGeoJSON(state.voyageRoutePoints));
+      setVoyageRouteVisibility(visible && state.voyageRoutePoints.length > 0);
+    }
+
+    function setVoyageRouteVisibility(visible) {
+      const visibility = visible ? 'visible' : 'none';
+      [voyageRouteLineId, voyageRoutePointId].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+      });
+    }
+
+    function setVoyageReal(points, visible = false) {
+      const src = map.getSource(voyageRealSourceId);
+      if (!src) return;
+      const features = (points || []).map((p, idx) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+        properties: { order: idx, ts: p.ts }
+      }));
+      if (features.length >= 2) {
+        features.unshift({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: features.map(f => f.geometry.coordinates) },
+          properties: { kind: 'real_route' }
+        });
+      }
+      src.setData({ type: 'FeatureCollection', features });
+      setVoyageRealVisibility(visible && features.length > 0);
+    }
+
+    function setVoyageRealVisibility(visible) {
+      const visibility = visible ? 'visible' : 'none';
+      [voyageRealLineId, voyageRealPointId].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+      });
+    }
+
+    function setupWebSocket() {
+      if (state.ws) state.ws.close();
+      const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+      state.ws = new WebSocket(`${wsProto}://${location.host}/ws`);
+      state.ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'position') { upsertVessel(msg.data); renderVessels(); }
+        else if (msg.type === 'alert') { document.getElementById('info').innerText = `ALERTA ${msg.data.type} en ${msg.data.mmsi}`; }
+      };
+      state.ws.onclose = () => {
+        state.ws = null;
+        if (state.user) setTimeout(setupWebSocket, 5000);
+      };
+    }
+
+    function setActiveTab(tab) {
+      state.currentTab = tab;
+      vesselTabButtons.forEach(btn => {
+        if (btn.dataset.tab === tab) btn.classList.add('active');
+        else btn.classList.remove('active');
+      });
+    }
+
+    async function loadVesselCard(ctx, tab) {
+      const naveId = (ctx && typeof ctx === 'object') ? ctx.naveId : null;
+      const mmsi = (ctx && typeof ctx === 'object') ? ctx.mmsi : ctx;
+      const byId = Boolean(naveId);
+      const urlMaps = byId ? {
+        basic: id => `/api/v1/catalog/vessel/by-id/${id}/basic`,
+        features: id => `/api/v1/catalog/vessel/by-id/${id}/features`,
+        areas: id => `/api/v1/catalog/vessel/by-id/${id}/areas`,
+        certs: id => `/api/v1/catalog/vessel/by-id/${id}/certs`,
+        engines: id => `/api/v1/catalog/vessel/by-id/${id}/engines`,
+        owner: id => `/api/v1/catalog/vessel/by-id/${id}/owner`,
+        manning: id => `/api/v1/catalog/vessel/by-id/${id}/manning`,
+        crew: id => `/api/v1/catalog/vessel/by-id/${id}/crew`,
+        armador: id => `/api/v1/catalog/vessel/by-id/${id}/armador`,
+        armador_license: id => `/api/v1/catalog/vessel/by-id/${id}/armador/license`,
+        passengers: id => `/api/v1/catalog/vessel/by-id/${id}/passengers`,
+        voyages: id => `/api/v1/catalog/vessel/by-id/${id}/voyages`,
+      } : {
+        basic: m => `/api/v1/catalog/vessel/${m}/basic`,
+        features: m => `/api/v1/catalog/vessel/${m}/features`,
+        areas: m => `/api/v1/catalog/vessel/${m}/areas`,
+        certs: m => `/api/v1/catalog/vessel/${m}/certs`,
+        engines: m => `/api/v1/catalog/vessel/${m}/engines`,
+        owner: m => `/api/v1/catalog/vessel/${m}/owner`,
+        manning: m => `/api/v1/catalog/vessel/${m}/manning`,
+        crew: m => `/api/v1/catalog/vessel/${m}/crew`,
+        armador: m => `/api/v1/catalog/vessel/${m}/armador`,
+        armador_license: m => `/api/v1/catalog/vessel/${m}/armador/license`,
+        passengers: m => `/api/v1/catalog/vessel/${m}/passengers`,
+        voyages: m => `/api/v1/catalog/vessel/${m}/voyages`,
+      };
+      const urlFn = urlMaps[tab || 'basic'];
+      const key = byId ? naveId : mmsi;
+      if (!urlFn || !key) return;
+      showMaritimeLoader('panel-content-v2');
+      const resp = await fetch(urlFn(key));
+      const data = await resp.json();
+      setFichaVisibility(true);
+      renderTabContent(tab, data.data || data, data, ctx);
+      if (tab === 'voyages') {
+        const points = data.route_points || [];
+        const realPoints = data.real_points || [];
+        const toggle = document.getElementById('voyage-route-toggle');
+        const toggleReal = document.getElementById('voyage-real-toggle');
+        const visible = toggle ? toggle.checked : false;
+        const visibleReal = toggleReal ? toggleReal.checked : false;
+        setVoyageRoute(points, visible);
+        setVoyageReal(realPoints, visibleReal);
+        if (toggle) {
+          toggle.onchange = (e) => setVoyageRoute(points, e.target.checked);
+        }
+        if (toggleReal) {
+          toggleReal.onchange = (e) => setVoyageReal(realPoints, e.target.checked);
+        }
+      }
+    }
+    function renderTabContent(tab, data, raw = null, ctx = null) {
+      const panel = document.getElementById('panel-content-v2');
+      const dash = v => (v === null || v === undefined || v === '') ? '-' : v;
+      if (tab === 'basic') {
+        const items = [
+          ["Nave ID", data.nave_id],
+          ["Nombre", data.nombre],
+          ["Matrícula", data.matricula],
+          ["MMSI", data.mmsi],
+          ["OMI / IMO", data.omi],
+          ["Tipo Nave", data.tipo_nave],
+          ["Tipo Tráfico", data.tipo_trafico],
+          ["Estado Operativo", data.estado_operativo],
+          ["Bandera", data.bandera],
+          ["Reparto", data.reparto],
+          ["Puerto Registro", data.puerto],
+          ["En Lista", data.en_lista ? 'Sí' : 'No'],
+          ["DMS Habilitado", data.dms_habilitado ? 'Sí' : 'No']
+        ];
+
+        const currentName = dash(data.nombre);
+        const currentMatricula = dash(data.matricula);
+        state.currentVesselDisplayName = `${currentName} - ${currentMatricula}`;
+        let html = `<div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:16px;">${currentName} <span style="font-weight:400; color:#64748b; font-size:14px;">(${currentMatricula})</span></div>`;
+
+        // Clean Grid Layout (No Cards)
+        html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:16px; padding-bottom:12px;">';
+        items.forEach(([label, val]) => {
+          html += `
+          <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">${label}</div>
+            <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(val)}</div>
+          </div>`;
+        });
+        html += '</div>';
+
+        if (panel) {
+          panel.innerHTML = html;
+        }
+      }
+      if (tab === 'features') {
+        // Generate info blocks
+        const features = data || {};
+        const exclude = ['fotos_referencia', 'images']; // Handle photos separately
+        const entries = Object.entries(features).filter(([k]) => !exclude.includes(k));
+
+        let html = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:16px;">';
+        entries.forEach(([key, val]) => {
+          html += `
+          <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+            <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">${formatLabel(key)}</div>
+            <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(val)}</div>
+          </div>`;
+        });
+        html += '</div>';
+
+        // Photos section with loading indicator
+        html += `
+      \u003cdiv style="margin-top:16px;"\u003e
+        \u003cdiv class="info-section-title"\u003eFotos de la Embarcación\u003c/div\u003e
+        \u003cdiv id="vessel-photos-container" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px;"\u003e
+          \u003cdiv style="grid-column: 1 / -1; padding:20px; text-align:center; color:#64748b; font-size:13px;"\u003e
+            \u003cdiv style="display:inline-block; width:20px; height:20px; border:2px solid #3b82f6; border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite;"\u003e\u003c/div\u003e
+            \u003cdiv style="margin-top:8px;"\u003eCargando fotos...\u003c/div\u003e
+          \u003c/div\u003e
+        \u003c/div\u003e
+      \u003c/div\u003e
+    `;
+        panel.innerHTML = html;
+
+        // Fetch and display real photos from Odoo
+        // Use naveId from context parameter
+        const photoNaveId = (ctx && typeof ctx === 'object') ? ctx.naveId : null;
+        if (photoNaveId) {
+          fetch(`/api/v1/catalog/vessel/by-id/${photoNaveId}/photos`)
+            .then(r => r.json())
+            .then(photoData => {
+              const photos = photoData.photos || [];
+              state.currentPhotos = photos; // Save for carousel
+              const container = document.getElementById('vessel-photos-container');
+
+              if (!container) return;
+
+              if (photos.length > 0) {
+                // Display real photos
+                container.innerHTML = photos.map((p, idx) => `
+                  <div style="border:1px solid #e2e8f0; border-radius:10px; overflow:hidden; background:#fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                    <img src="data:${p.mime_type};base64,${p.image_data}" 
+                         alt="Foto ${idx + 1}" 
+                         style="width:100%; aspect-ratio:4/3; object-fit:cover; display:block; cursor:pointer;"
+                         onclick="openPhotoModal(${idx})">
+                    <div style="padding:8px; font-size:11px; color:#64748b; text-align:center; font-weight:500; border-top:1px solid #e2e8f0;">
+                      Foto ${idx + 1}
+                      ${p.fecha_foto ? `<br><span style="font-size:10px; color:#94a3b8;">${p.fecha_foto}</span>` : ''}
+                    </div>
+                  </div>
+                `).join('');
+              } else if (photoData.error) {
+                // Show error message
+                container.innerHTML = `
+                  \u003cdiv style="grid-column: 1 / -1; padding:20px; text-align:center; color:#ef4444; font-size:13px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px;"\u003e
+                    ⚠️ Error cargando fotos: ${photoData.error}
+                  \u003c/div\u003e
+                `;
+              } else {
+                // No photos available
+                container.innerHTML = `
+                  \u003cdiv style="grid-column: 1 / -1; padding:30px; text-align:center; color:#94a3b8; font-size:13px;"\u003e
+                    \u003cdiv style="font-size:48px; margin-bottom:12px; opacity:0.5;"\u003e📷\u003c/div\u003e
+                    \u003cdiv\u003eNo hay fotos disponibles para esta embarcación\u003c/div\u003e
+                  \u003c/div\u003e
+                `;
+              }
+            })
+            .catch(err => {
+              console.error('Error loading photos:', err);
+              const container = document.getElementById('vessel-photos-container');
+              if (container) {
+                container.innerHTML = `
+                  \u003cdiv style="grid-column: 1 / -1; padding:20px; text-align:center; color:#f59e0b; font-size:13px; background:#fffbeb; border:1px solid #fde68a; border-radius:8px;"\u003e
+                    ⚠️ Error de conexión al cargar fotos
+                  \u003c/div\u003e
+                `;
+              }
+            });
+        } else {
+          // No nave_id available, show message
+          const container = document.getElementById('vessel-photos-container');
+          if (container) {
+            container.innerHTML = `
+              \u003cdiv style="grid-column: 1 / -1; padding:30px; text-align:center; color:#94a3b8; font-size:13px;"\u003e
+                \u003cdiv style="font-size:48px; margin-bottom:12px; opacity:0.5;"\u003e📷\u003c/div\u003e
+                \u003cdiv\u003eNo se puede cargar fotos sin ID de embarcación\u003c/div\u003e
+              \u003c/div\u003e
+            `;
+          }
+        }
+
+      } else if (tab === 'certs') {
+        const certs = Array.isArray(data) ? data : [];
+
+        // Extract summary info (Odoo RPC)
+        const cumple = raw ? raw.cumple_lista_autorizada : null;
+        const listaNombre = raw ? raw.lista_autorizada_nombre : null;
+
+        let summaryHtml = '';
+        if (cumple !== null || listaNombre) {
+          summaryHtml = `
+            <div style="margin-bottom: 16px; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px;">
+              <div style="font-weight: 700; color: #334155; margin-bottom: 8px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em;">Lista Autorizada</div>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                 <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 4px;">
+                   <span style="color: #64748b;">Cumple certificados base:</span>
+                   <span style="font-weight: 600; color: ${cumple ? '#166534' : '#ef4444'};">
+                     ${cumple ? 'SÍ' : 'NO'}
+                   </span>
+                 </div>
+                 ${listaNombre ? `
+                 <div style="display: flex; justify-content: space-between; padding-top: 2px;">
+                   <span style="color: #64748b;">Certificados para Lista:</span>
+                   <span style="font-weight: 600; color: #0f172a; text-align: right; max-width: 60%;">${listaNombre}</span>
+                 </div>` : ''}
+              </div>
+            </div>
+            `;
+        }
+
+        if (!certs.length) {
+          panel.innerHTML = summaryHtml + '<div class="kv-empty">Sin certificados registrados</div>';
+          return;
+        }
+
+        const tableRows = certs.map(c => {
+          // Helper to format YYYY-MM-DD to DD/MM/YYYY
+          const fmtDate = (isoStr) => {
+            if (!isoStr) return '-';
+            const match = isoStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (match) {
+              return `${match[3]}/${match[2]}/${match[1]}`;
+            }
+            return isoStr;
+          };
+
+          const cadRaw = (c.fecha_caducidad || '').toLowerCase();
+          const hasDoc = c.numero && c.numero !== '-';
+
+          let color = '#166534'; // Green
+          let statusText = '-';
+          let emisionText = fmtDate(c.fecha_emision);
+
+          if (!hasDoc) {
+            color = '#94a3b8'; // Grey
+            statusText = '';
+          } else if (cadRaw.includes('no caduca')) {
+            color = '#166534'; // Green
+            statusText = 'No caduca';
+          } else {
+            const dateMatch = cadRaw.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (dateMatch) {
+              const dStr = dateMatch[0];
+              const d = new Date(dStr);
+              if (!isNaN(d.getTime())) {
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                if (d < now) {
+                  color = '#991b1b'; // Red
+                  statusText = 'Caducado';
+                } else {
+                  color = '#166534'; // Green
+                  statusText = fmtDate(dStr);
+                }
+              } else {
+                statusText = cadRaw;
+              }
+            } else if (cadRaw.includes('caducado') || cadRaw.includes('vencido')) {
+              color = '#991b1b';
+              statusText = 'Caducado';
+            } else {
+              statusText = c.fecha_caducidad ? c.fecha_caducidad : '-';
+            }
+          }
+
+          return `
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 12px 8px; font-weight: 600; color: ${color};">${c.documento || 'Certificado'}</td>
+            <td style="padding: 12px 8px; color: ${color};">${hasDoc ? dash(c.numero) : ''}</td>
+            <td style="padding: 12px 8px; color: ${color};">${hasDoc ? emisionText : ''}</td>
+            <td style="padding: 12px 8px; font-weight: 600; color: ${color};">${statusText}</td>
+          </tr>
+          `;
+        }).join('');
+
+        panel.innerHTML = summaryHtml + `
+        <div class="table-container" style="border:none; box-shadow:none; padding-bottom:100px;">
+          <table class="clean-table" style="width:100%; text-align:left; border-collapse:collapse; font-size:13px; margin-bottom:40px;">
+            <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+              <tr style="border-bottom:2px solid #e2e8f0;">
+                <th style="padding:10px 8px; color:#64748b; font-weight:700;">TIPO DE DOCUMENTO</th>
+                <th style="padding:10px 8px; color:#64748b; font-weight:700;">DOCUMENTO REGISTRADO</th>
+                <th style="padding:10px 8px; color:#64748b; font-weight:700;">EMISIÓN</th>
+                <th style="padding:10px 8px; color:#64748b; font-weight:700;">ENDOSO/CADUCIDAD</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+        `;
+
+      } else if (tab === 'engines') {
+        const engines = Array.isArray(data) ? data : [];
+        if (!engines.length) {
+          panel.innerHTML = '<div class="kv-empty">Sin motores registrados</div>';
+          return;
+        }
+        const html = engines.map((e, idx) => `
+        <div style="margin-bottom:24px;">
+           <div style="font-size:16px; font-weight:700; color:#0f172a; margin-bottom:12px; border-bottom:2px solid #e2e8f0; padding-bottom:4px;">
+             Motor #${idx + 1} <span style="font-weight:400; color:#64748b; font-size:14px;">(${dash(e.marca)})</span>
+           </div>
+           
+           <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:16px;">
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Modelo</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(e.modelo)}</div>
+             </div>
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Serie</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(e.serie)}</div>
+             </div>
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Potencia</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(e.potencia)} HP</div>
+             </div>
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">RPM</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(e.rpm)}</div>
+             </div>
+           </div>
+        </div>
+        `).join('');
+        panel.innerHTML = html;
+
+      } else if (tab === 'owner' || tab === 'armador') {
+        const d = data || {};
+        const title = tab === 'owner' ? 'Propietario' : 'Armador';
+        if (!d.nombre) {
+          panel.innerHTML = `<div class="kv-empty">Sin información de ${title}</div>`;
+          return;
+        }
+        panel.innerHTML = `
+        <div style="font-size:18px; font-weight:700; color:#0f172a; margin-bottom:16px;">
+           ${title} 
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:16px;">
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Nombre</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(d.nombre)}</div>
+             </div>
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Identificación</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(d.identificacion || d.ruc)}</div>
+             </div>
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Dirección</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(d.direccion)}</div>
+             </div>
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Teléfono</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(d.telefono || d.celular)}</div>
+             </div>
+             <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">Email</div>
+               <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${dash(d.email)}</div>
+             </div>
+        </div>
+      `;
+
+      } else if (tab === 'crew' || tab === 'manning' || tab === 'passengers') {
+        const list = Array.isArray(data) ? data : [];
+        if (!list.length) {
+          panel.innerHTML = '<div class="kv-empty">Sin registros</div>';
+          return;
+        }
+        // Simple table generator
+        const cols = Object.keys(list[0] || {});
+        const headerHtml = cols.map(c => `<th>${formatLabel(c)}</th>`).join('');
+        const rowsHtml = list.map(item => `
+      <tr>${cols.map(c => `<td>${dash(item[c])}</td>`).join('')}</tr>
+    `).join('');
+
+        panel.innerHTML = `
+      <div class="table-container" style="border:none; box-shadow:none;">
+        <table class="clean-table">
+          <thead><tr>${headerHtml}</tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    `;
+
+      } else if (tab === 'voyages') {
+        const rows = (raw && Array.isArray(raw.rows)) ? raw.rows : [];
+        const hasRoute = raw && Array.isArray(raw.route_points) && raw.route_points.length > 0;
+        const hasReal = raw && Array.isArray(raw.real_points) && raw.real_points.length > 0;
+        const r = rows[0] || null;
+        const table = r ? `
+      <div class="ficha-2col">
+        <div class="info-card">
+           <div class="info-card-title">📄 Documento de Zarpe</div>
+           <div class="info-row"><span class="info-label">Zarpe ID</span> <span class="info-val">${dash(r.zarpe_id)}</span></div>
+           <div class="info-row"><span class="info-label">Documento</span> <span class="info-val">${dash(r.documento_nombre)}</span></div>
+           <div class="info-row"><span class="info-label">Estado</span> <span class="info-val">${dash(r.estado_documento)}</span></div>
+        </div>
+        <div class="info-card">
+           <div class="info-card-title">⚓ Navegación</div>
+           <div class="info-row"><span class="info-label">Tipo</span> <span class="info-val">${dash(r.navegacion)}</span></div>
+           <div class="info-row"><span class="info-label">Puerto</span> <span class="info-val">${dash(r.puerto_origen)}</span></div>
+           <div class="info-row"><span class="info-label">Fecha</span> <span class="info-val">${dash(r.fecha_zarpe)}</span></div>
+        </div>
+      </div>
+    ` : '<div class="kv-empty">Sin zarpes vigentes.</div>';
+
+        panel.innerHTML = `
+      ${table}
+      <div class="info-card" style="margin-top:16px;">
+        <div class="info-card-title">🗺️ Visualización de Ruta</div>
+        
+        <label style="display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="voyage-route-toggle">
+          Ruta del Zarpe (Planificada)
+        </label>
+        <div style="font-size:12px; color:#64748b; margin:4px 0 12px 24px;">
+          Muestra la trayectoria declarada en el documento.
+        </div>
+        
+        <label style="display:flex; align-items:center; gap:8px; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="voyage-real-toggle" ${hasReal ? 'checked' : ''}>
+          Ruta Real (Track Histórico)
+        </label>
+        <div style="font-size:12px; color:#64748b; margin:4px 0 0 24px;">
+          Puntos reportados por DMS durante el periodo del zarpe.
+        </div>
+      </div>
+    `;
+        // Re-bind listeners (logic same as before but inside new HTML structure)
+        setTimeout(() => {
+          /* ... existing bindings logic ... */
+          const points = raw.route_points || [];
+          const realPoints = raw.real_points || [];
+          const toggle = document.getElementById('voyage-route-toggle');
+          const toggleReal = document.getElementById('voyage-real-toggle');
+
+          if (toggle) {
+            toggle.checked = state.voyageRouteVisible || false; // better state tracking needed? Using DOM state for now
+            toggle.onchange = (e) => setVoyageRoute(points, e.target.checked);
+          }
+          if (toggleReal) {
+            toggleReal.onchange = (e) => setVoyageReal(realPoints, e.target.checked);
+          }
+        }, 0);
+
+      } else {
+        // Falback to generic for unknowns (Areas, Armador License etc)
+        const body = renderStructuredData(data);
+        panel.innerHTML = body;
+      }
+    }
+
+    // --- PHOTO MODAL LOGIC ---
+    function openPhotoModal(index) {
+      if (!state.currentPhotos || !state.currentPhotos[index]) return;
+      state.currentPhotoIndex = index;
+
+      const modal = document.getElementById('photo-modal');
+      const img = document.getElementById('photo-modal-img');
+      const label = document.getElementById('photo-modal-label');
+
+      const photo = state.currentPhotos[index];
+      img.src = `data:${photo.mime_type};base64,${photo.image_data}`;
+
+      const vesselLabel = state.currentVesselDisplayName ? `${state.currentVesselDisplayName} | ` : '';
+      label.innerText = `${vesselLabel}Foto ${index + 1} de ${state.currentPhotos.length}`;
+
+      modal.style.display = 'flex';
+
+      // Update arrow visibility
+      document.querySelector('.modal-btn.prev').style.display = state.currentPhotos.length > 1 ? 'flex' : 'none';
+      document.querySelector('.modal-btn.next').style.display = state.currentPhotos.length > 1 ? 'flex' : 'none';
+    }
+
+    function closePhotoModal() {
+      document.getElementById('photo-modal').style.display = 'none';
+    }
+
+    function changePhoto(offset) {
+      if (!state.currentPhotos.length) return;
+      let newIdx = state.currentPhotoIndex + offset;
+      if (newIdx < 0) newIdx = state.currentPhotos.length - 1;
+      if (newIdx >= state.currentPhotos.length) newIdx = 0;
+      openPhotoModal(newIdx);
+    }
+
+    // Keyboard support for modal
+    window.addEventListener('keydown', (e) => {
+      const modal = document.getElementById('photo-modal');
+      if (modal && modal.style.display === 'flex') {
+        if (e.key === 'Escape') closePhotoModal();
+        if (e.key === 'ArrowLeft') changePhoto(-1);
+        if (e.key === 'ArrowRight') changePhoto(1);
+      }
+    });
+
+    function renderStructuredData(data, depth = 0) {
+      if (data === null || data === undefined) return '<div class="kv-empty">Sin datos disponibles</div>';
+      if (Array.isArray(data)) {
+        if (!data.length) return '<div class="kv-empty">Sin registros</div>';
+        if (typeof data[0] === 'object' && data[0] !== null && depth < 2) {
+          const columns = Array.from(new Set(data.flatMap(item => Object.keys(item || {}))));
+          const header = columns.map(c => `<th>${formatLabel(c)}</th>`).join('');
+          const rows = data.map(item => `<tr>${columns.map(c => `<td>${formatValue(item?.[c], depth + 1)}</td>`).join('')}</tr>`).join('');
+          return `<table class="kv-table"><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table>`;
+        }
+        return `<ul>${data.map(item => `<li>${formatValue(item, depth + 1)}</li>`).join('')}</ul>`;
+      }
+      if (typeof data === 'object') {
+        const entries = Object.entries(data);
+        if (!entries.length) return '<div class="kv-empty">Sin datos disponibles</div>';
+
+        let gridHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:16px; padding-bottom:12px;">';
+        entries.forEach(([key, val]) => {
+          gridHtml += `
+           <div style="border-bottom:1px solid #f1f5f9; padding-bottom:8px;">
+             <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:#0ea5e9; font-weight:700; margin-bottom:4px;">${formatLabel(key)}</div>
+             <div style="font-size:15px; color:#334155; font-weight:600; word-break:break-word; line-height:1.4;">${formatValue(val, depth + 1)}</div>
+           </div>`;
+        });
+        gridHtml += '</div>';
+        return gridHtml;
+      }
+      return `<p>${formatValue(data, depth)}</p>`;
+    }
+
+    function getVesselPopupHTML(feature) {
+      if (!feature) return '';
+      const props = feature.properties || {};
+      const coords = feature.geometry?.coordinates || [];
+
+      const name = props.name || 'Embarcación';
+      const matricula = props.matricula ? `(${props.matricula})` : '';
+      const nid = props.nave_id || '-';
+      const mmsi = props.mmsi || '-';
+      const status = props.alert ? '<span style="color:#dc2626;font-weight:600;">Alerta</span>' : '<span style="color:#16a34a;font-weight:600;">Normal</span>';
+
+      const lat = Number.isFinite(coords[1]) ? toDMS(coords[1], true) : '-';
+      const lon = Number.isFinite(coords[0]) ? toDMS(coords[0], false) : '-';
+      const sog = props.sog_knots != null ? `${Number(props.sog_knots).toFixed(1)} kn` : '-';
+
+      const cogValue = props.cog_deg != null ? Number(props.cog_deg) : null;
+      const cogText = cogValue == null ? '-' : `${cogValue.toFixed(0)}°`;
+      const arrow = cogValue == null ? '' : headingArrowHTML(cogValue, { size: 12, margin: 4 });
+
+      const ts = fmtTs(props.ts);
+
+      return `
+        <div style="min-width:180px; color:#1e293b; font-family:sans-serif;">
+          <div style="font-weight:700; color:#0f172a; margin-bottom:4px; font-size:13px;">
+            ${name} <span style="font-weight:400; color:#64748b;">${matricula}</span>
+          </div>
+          <div style="font-size:11px; display:grid; grid-template-columns:auto 1fr; gap:3px 10px;">
+            <span style="color:#64748b;">Nave ID:</span> <strong>${nid}</strong>
+            <span style="color:#64748b;">MMSI:</span> <strong>${mmsi}</strong>
+            <span style="color:#64748b;">Estado:</span> <span>${status}</span>
+            <span style="color:#64748b;">Velocidad:</span> <strong>${sog}</strong>
+            <span style="color:#64748b;">Lon:</span> <strong>${lon}</strong>
+            <span style="color:#64748b;">Lat:</span> <strong>${lat}</strong>
+            <span style="color:#64748b;">Rumbo:</span> <strong>${arrow}${cogText}</strong>
+          </div>
+          <div style="font-size:10px; color:#94a3b8; margin-top:6px; text-align:right;">
+            Actualizado: ${ts}
+          </div>
+        </div>
+      `;
+    }
+
+    function formatLabel(key) {
+      if (!key) return '';
+      return key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+    }
+
+    function formatValue(value, depth = 0) {
+      if (value === null || value === undefined || value === '') return '-';
+      if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+        if (depth > 2) return JSON.stringify(value);
+        return renderStructuredData(value, depth);
+      }
+      if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value.toLocaleString('es-EC', { maximumFractionDigits: value % 1 === 0 ? 0 : 3 }) : '-';
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed === '') return '-';
+        const isoMatch = /^\d{4}-\d{2}-\d{2}/.test(trimmed);
+        if (isoMatch && !isNaN(Date.parse(trimmed))) {
+          return new Date(trimmed).toLocaleString('es-EC');
+        }
+        return trimmed;
+      }
+      return String(value);
+    }
+
+    async function setProjectionState(enabled, minutes) {
+      state.projection.enabled = enabled;
+      state.projection.minutes = minutes;
+
+      const controls = document.getElementById('proj-controls');
+      if (controls) controls.style.display = enabled ? 'block' : 'none';
+
+      const srcId = 'projection-src';
+      const layerId = 'projection-layer';
+      const loadingDiv = document.getElementById('proj-loading');
+      const progressBar = document.getElementById('proj-progress-bar');
+
+      if (!enabled) {
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+        if (map.getSource(srcId)) map.removeSource(srcId);
+        if (loadingDiv) loadingDiv.style.display = 'none';
+        return;
+      }
+
+      const projTargetId = state.currentNaveId || state.currentMMSI;
+      if (!projTargetId) return;
+
+      try {
+        // Show progress bar
+        if (loadingDiv && progressBar) {
+          loadingDiv.style.display = 'block';
+          progressBar.style.width = '30%';
+        }
+
+        const url = state.currentNaveId
+          ? `/api/v1/vessels/by-id/${state.currentNaveId}/projection?minutes=${minutes}`
+          : `/api/v1/vessels/${state.currentMMSI}/projection?minutes=${minutes}`;
+        const res = await fetch(url);
+
+        if (progressBar) progressBar.style.width = '70%';
+
+        const geojson = await res.json();
+
+        if (progressBar) progressBar.style.width = '100%';
+
+        if (map.getSource(srcId)) {
+          map.getSource(srcId).setData(geojson);
+        } else {
+          map.addSource(srcId, { type: 'geojson', data: geojson });
+          map.addLayer({
+            id: layerId,
+            type: 'line',
+            source: srcId,
+            layout: {
+              'line-join': 'round',
+              'line-cap': 'round'
+            },
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': 4,
+              'line-dasharray': [2, 1]
+            }
+          });
+        }
+
+        // Hide progress bar after completion
+        setTimeout(() => {
+          if (loadingDiv) loadingDiv.style.display = 'none';
+          if (progressBar) progressBar.style.width = '0%';
+        }, 300);
+
+      } catch (err) {
+        console.error("Error fetching projection", err);
+        if (loadingDiv) loadingDiv.style.display = 'none';
+        if (progressBar) progressBar.style.width = '0%';
+      }
+    }
+
+    async function loadIncidentAlerts(filterText) {
+      if (state.alertsLoaded && !filterText) {
+        renderAlertsTable();
+        return;
+      }
+      showMaritimeLoader('alerts-table');
+      const url = filterText ? `/api/v1/alerts/incidents?q=${encodeURIComponent(filterText)}` : '/api/v1/alerts/incidents';
+      const resp = await fetch(url);
+      const js = await resp.json();
+      state.alerts = js.data || [];
+      state.alertsLoaded = true;
+      renderAlertsTable();
+      refreshVesselAlerts(); // Sync map with new alerts
+    }
+
+    function renderTable(headers, rows, targetEl, rowHandler) {
+      if (!targetEl) return;
+      if (!rows.length) {
+        targetEl.innerHTML = '<div class="kv-empty" style="padding:8px;">Sin registros</div>';
+        return;
+      }
+      const thead = `<thead><tr>${headers.map(h => `<th>${h.label}</th>`).join('')}</tr></thead>`;
+      const tbody = `<tbody>${rows.map((r, idx) => `<tr data-idx="${idx}">${headers.map(h => `<td>${r[h.key] ?? '-'}</td>`).join('')}</tr>`).join('')}</tbody>`;
+      targetEl.innerHTML = `<table class="data-table">${thead}${tbody}</table>`;
+      if (rowHandler) {
+        targetEl.querySelectorAll('tbody tr').forEach(tr => {
+          tr.addEventListener('click', (event) => {
+            const i = Number(tr.dataset.idx);
+            // Check if clicked target is the map button
+            const mapBtn = (event.target).closest('.goto-map');
+            if (mapBtn) {
+              event.stopPropagation();
+              const nid = mapBtn.dataset.id;
+              focusVessel(nid);
+              return;
+            }
+            rowHandler(rows[i]);
+          });
+        });
+      }
+    }
+
+    function renderAlertsTable() {
+      const q = (bottomSearchEl?.value || '').toLowerCase();
+      const alerts = (state.alerts || []).filter(r => {
+        if (!q) return true;
+        return Object.values(r || {}).some(v => String(v || '').toLowerCase().includes(q));
+      });
+
+      if (!alerts.length) {
+        alertsTableEl.innerHTML = '<div class="kv-empty" style="padding:16px; text-align:center;">Sin alertas activas</div>';
+        return;
+      }
+
+      const cardsHtml = alerts.map(r => {
+        const sev = String(r.severidad || '').toLowerCase();
+        const sevClass = sev.includes('crit') ? 'critico' : sev.includes('medio') ? 'medio' : 'otro';
+        const sevLabel = r.severidad || 'Alerta';
+
+        return `
+      <div class="alert-card">
+        <div class="alert-card-header">
+          <div class="alert-vessel-name">${r.nave_name || 'Desconocido'} <span style="font-weight:400; color:#64748b;">(${r.nave_id || '-'})</span></div>
+          <div class="alert-time">${r.create_date || '-'}</div>
+        </div>
+        
+        <div class="alert-body">
+          <div style="margin-bottom:4px;">
+            <span class="badge ${sevClass}">${sevLabel}</span>
+            <span style="font-weight:600; color:#334155; margin-left:6px;">${r.evento_tipo || 'Evento'}</span>
+          </div>
+          <div style="color:#475569;">
+            ${r.reparto || ''} - MMSI: ${r.nave_mmsi || '-'}
+          </div>
+        </div>
+        
+        <div class="alert-footer">
+          <button class="alert-action-btn goto-map" data-nave="${r.nave_id || ''}" data-mmsi="${r.nave_mmsi || ''}">
+            📍 Localizar en Mapa
+          </button>
+        </div>
+      </div>
+    `;
+      }).join('');
+
+      alertsTableEl.innerHTML = cardsHtml;
+
+      alertsTableEl.querySelectorAll('.goto-map').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const nid = btn.dataset.nave;
+          const mmsi = btn.dataset.mmsi;
+          focusVessel(nid, mmsi);
+        });
+      });
+    }
+
+    function renderVesselsTable() {
+      if (!vesselsTableEl) return;
+      const q = (bottomSearchEl?.value || '').toLowerCase();
+      const vessels = Object.values(state.vessels || {});
+      const headers = [
+        { key: 'status_dot', label: '' }, // Empty label for dot column
+        { key: 'goto', label: 'Ver' },
+        { key: 'analyze', label: 'Analizar' },
+        { key: 'nave_id', label: 'Nave ID' },
+        { key: 'mmsi', label: 'MMSI' },
+        { key: 'name', label: 'Nombre' },
+        { key: 'matricula', label: 'Matrícula' },
+        { key: 'sog_knots', label: 'Velocidad' },
+        { key: 'cog_deg', label: 'Rumbo' },
+        { key: 'ts', label: 'Fecha' },
+      ];
+      const rows = vessels.map(v => {
+        const p = v.properties || {};
+        const color = p.color || '#9ca3af';
+        return {
+          status_dot: `<span class="status-dot" style="background-color: ${color}" title="${p.status_color || 'Unknown'}"></span>`,
+          nave_id: p.nave_id || '',
+          mmsi: p.mmsi || '',
+          name: p.name || '',
+          matricula: p.matricula || '',
+          sog_knots: p.sog_knots != null ? Number(p.sog_knots).toFixed(1) : '',
+          cog_deg: p.cog_deg != null ? `${headingArrowHTML(Number(p.cog_deg), { size: 12, margin: 4 })}${Number(p.cog_deg).toFixed(0)}` : '',
+          ts: p.ts ? fmtTs(p.ts) : '',
+          goto: `<button class="icon-btn goto-map" title="Ir al mapa" data-id="${p.nave_id || ''}">🗺️</button>`,
+          analyze: `<input type="checkbox" class="analysis-chk" data-id="${p.nave_id || ''}" ${state.analysisSelection.has(String(p.nave_id)) ? 'checked' : ''}>`
+        };
+      }).filter(r => {
+        if (!q) return true;
+        return Object.values(r).some(v => String(v || '').toLowerCase().includes(q));
+      });
+      renderTable(headers, rows, vesselsTableEl, (row) => {
+        focusVessel(row.nave_id, row.mmsi);
+      });
+      // Bind checkbox events
+      vesselsTableEl.querySelectorAll('.analysis-chk').forEach(chk => {
+        chk.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleAnalysisVessel(chk.dataset.id, chk.checked);
+        });
+      });
+    }
+
+    function toggleAnalysisVessel(id, checked) {
+      if (!id) return;
+      if (checked) {
+        if (state.analysisSelection.size >= 4) {
+          alert("Máximo 4 embarcaciones permitidas para análisis.");
+          // Revert check
+          const el = document.querySelector(`.analysis-chk[data-id="${id}"]`);
+          if (el) el.checked = false;
+          return;
+        }
+        state.analysisSelection.add(id);
+      } else {
+        state.analysisSelection.delete(id);
+      }
+      updateAnalysisUI();
+    }
+
+    function updateAnalysisUI() {
+      const controls = document.getElementById('analysis-controls');
+      if (state.analysisSelection.size > 0 && state.analysisSelection.size <= 4) {
+        controls.style.display = 'block';
+      } else {
+        controls.style.display = 'none';
+      }
+    }
+
+    async function runAnalysis() {
+      const startVal = document.getElementById('analysis-start').value;
+      const endVal = document.getElementById('analysis-end').value;
+      if (!startVal || !endVal) {
+        alert("Seleccione fecha inicial y final");
+        return;
+      }
+      const startTs = new Date(startVal).getTime() / 1000;
+      const endTs = (new Date(endVal).getTime() / 1000) + 86400; // End of day included
+
+      const ids = Array.from(state.analysisSelection).join(',');
+      const btn = document.getElementById('btn-analyze');
+      const originalText = btn.textContent;
+      btn.textContent = 'Cargando...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/v1/analysis/history?ids=${ids}&start=${startTs}&end=${endTs}`);
+        const geojson = await res.json();
+
+        // Draw on map
+        const sourceId = 'analysis-source';
+        if (map.getSource(sourceId)) {
+          map.getSource(sourceId).setData(geojson);
+        } else {
+          map.addSource(sourceId, { type: 'geojson', data: geojson });
+
+          // Add line layer for tracks
+          map.addLayer({
+            id: 'analysis-layer-line',
+            type: 'line',
+            source: sourceId,
+            filter: ['==', ['get', 'feature_type'], 'track_line'],
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': 4
+            }
+          });
+
+          // Add point layer for interactive tooltips
+          map.addLayer({
+            id: 'analysis-layer-points',
+            type: 'circle',
+            source: sourceId,
+            filter: ['==', ['get', 'feature_type'], 'track_point'],
+            paint: {
+              'circle-radius': 4,
+              'circle-color': ['get', 'color'],
+              'circle-opacity': 0,  // Invisible by default
+              'circle-stroke-width': 0
+            }
+          });
+
+          // Add hover effect for points
+          map.on('mouseenter', 'analysis-layer-points', (e) => {
+            map.getCanvas().style.cursor = 'pointer';
+
+            const feature = e.features[0];
+            const props = feature.properties;
+            const coords = feature.geometry.coordinates.slice();
+
+            // Format timestamp
+            let timeStr = '-';
+            if (props.timestamp) {
+              try {
+                const d = new Date(props.timestamp);
+                timeStr = d.toLocaleString('es-EC', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                });
+              } catch (err) {
+                timeStr = props.timestamp;
+              }
+            }
+
+            const html = `
+              <div style="min-width:160px; color:#1e293b; font-family:sans-serif;">
+                <div style="font-weight:700; color:#0f172a; margin-bottom:4px; font-size:13px;">
+                  ${props.name || 'Embarcación'}
+                </div>
+                <div style="font-size:11px; display:grid; grid-template-columns:auto 1fr; gap:3px 10px;">
+                  <span style="color:#64748b;">Nave ID:</span> <strong>${props.nave_id || '-'}</strong>
+                  <span style="color:#64748b;">Fecha/Hora:</span> <strong>${timeStr}</strong>
+                </div>
+              </div>
+            `;
+
+            new maplibregl.Popup({ closeButton: false, closeOnClick: false })
+              .setLngLat(coords)
+              .setHTML(html)
+              .addTo(map);
+          });
+
+          map.on('mouseleave', 'analysis-layer-points', () => {
+            map.getCanvas().style.cursor = '';
+            // Remove popup
+            const popups = document.getElementsByClassName('maplibregl-popup');
+            if (popups.length) {
+              popups[0].remove();
+            }
+          });
+        }
+      } catch (e) {
+        console.error(e);
+        alert("Error al analizar historial");
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    function clearAnalysisLayers() {
+      state.analysisSelection.clear();
+      updateAnalysisUI();
+      // Uncheck boxes
+      document.querySelectorAll('.analysis-chk').forEach(c => c.checked = false);
+      const sourceId = 'analysis-source';
+      if (map.getSource(sourceId)) {
+        map.getSource(sourceId).setData({ type: 'FeatureCollection', features: [] });
+      }
+      // Remove any lingering popups
+      const popups = document.getElementsByClassName('maplibregl-popup');
+      while (popups.length) {
+        popups[0].remove();
+      }
+    }
+
+    function focusVessel(naveId, mmsi) {
+      let feature = null;
+      if (naveId && state.vessels[naveId]) {
+        feature = state.vessels[naveId];
+      } else if (mmsi) {
+        feature = Object.values(state.vessels).find(f => String(f.properties?.mmsi) === String(mmsi));
+      }
+      if (!feature) return;
+      const coords = feature.geometry?.coordinates;
+      if (coords && Number.isFinite(coords[0]) && Number.isFinite(coords[1])) {
+        map.easeTo({ center: coords, zoom: Math.max(map.getZoom(), 12) });
+
+        // Show popup
+        new maplibregl.Popup({ closeButton: false, closeOnClick: true })
+          .setLngLat(coords)
+          .setHTML(getVesselPopupHTML(feature))
+          .addTo(map);
+      }
+      state.currentNaveId = feature.properties?.nave_id ? String(feature.properties.nave_id) : null;
+      state.currentMMSI = feature.properties?.mmsi ? String(feature.properties.mmsi) : null;
+      updateRealtimeSummary(feature);
+      setFichaVisibility(true);
+      setBottomTab('ficha');
+      openBottomPanel();
+      setActiveTab('basic');
+      loadVesselCard({ naveId: state.currentNaveId, mmsi: state.currentMMSI }, 'basic');
+    }
+
+    function openBottomPanel() {
+      state.bottomOpen = true;
+      bottomPanelEl?.classList.remove('hidden');
+      if (bottomToggleEl) {
+        bottomToggleEl.textContent = 'Información y Alertas ▾';
+        bottomToggleEl.classList.add('over-panel');
+      }
+    }
+
+    function closeBottomPanel() {
+      state.bottomOpen = false;
+      bottomPanelEl?.classList.add('hidden');
+      if (bottomToggleEl) {
+        bottomToggleEl.textContent = 'Información y Alertas ▴';
+        bottomToggleEl.classList.remove('over-panel');
+      }
+    }
+
+    function setBottomTab(tab) {
+      state.bottomTab = tab;
+      bottomTabButtons.forEach(btn => {
+        if (btn.dataset.btab === tab) btn.classList.add('active');
+        else btn.classList.remove('active');
+      });
+      bottomTabFicha?.classList.toggle('active', tab === 'ficha');
+      bottomTabAlerts?.classList.toggle('active', tab === 'alerts');
+      bottomTabVessels?.classList.toggle('active', tab === 'vessels');
+      if (bottomSearchEl) {
+        bottomSearchEl.style.display = tab === 'ficha' ? 'none' : '';
+      }
+      refreshBottomTab();
+    }
+
+    function refreshBottomTab() {
+      if (state.bottomTab === 'ficha') {
+        return;
+      } else if (state.bottomTab === 'alerts') {
+        if (!state.alertsLoaded) {
+          loadIncidentAlerts(bottomSearchEl?.value || '');
+        } else {
+          renderAlertsTable();
+        }
+      } else {
+        renderVesselsTable();
+      }
+    }
+
+    console.log("Registering load event listener");
+    window.addEventListener('load', () => {
+      console.log("Window loaded, calling ensureLogin");
+      ensureLogin();
+    });
+  </script>
+  <!-- Photo Modal Structure -->
+  <div id="photo-modal" onclick="if(event.target === this) closePhotoModal()">
+    <span id="photo-modal-close" onclick="closePhotoModal()">&times;</span>
+    <button class="modal-btn prev" onclick="changePhoto(-1)">&#10094;</button>
+    <div id="photo-modal-content">
+      <img id="photo-modal-img" src="" alt="Vessel Photo">
+      <div id="photo-modal-label">Foto X de Y</div>
+    </div>
+    <button class="modal-btn next" onclick="changePhoto(1)">&#10095;</button>
+  </div>
+</body>
+
+</html>

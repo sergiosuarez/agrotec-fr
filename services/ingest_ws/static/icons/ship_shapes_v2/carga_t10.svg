@@ -1,0 +1,16 @@
+
+    <svg xmlns="http://www.w3.org/2000/svg" width="156.0" height="72.0" viewBox="0 0 156.0 72.0">
+      <!-- hull -->
+      <rect x="6.0" y="12.0" width="138.0" height="48.0" fill="#2a9d8f"/>
+      <!-- bow taper -->
+      <polygon fill="#2a9d8f" points="
+        144.0,12.0
+        153.0,36.0
+        144.0,60.0
+      "/>
+      <!-- containers -->
+      <rect x="24.0" y="18.0" width="24.0" height="15.0" fill="white" opacity="0.6"/>
+      <rect x="54.0" y="18.0" width="24.0" height="15.0" fill="white" opacity="0.6"/>
+      <rect x="84.0" y="18.0" width="24.0" height="15.0" fill="white" opacity="0.6"/>
+    </svg>
+    

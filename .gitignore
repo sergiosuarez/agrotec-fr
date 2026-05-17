@@ -1,0 +1,44 @@
+# Secretos
+.env
+.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Datos / backups
+*.dump
+*.sql.gz
+*.tar.gz
+*.zip
+*.mbtiles
+*.pmtiles
+*.sqlite3
+data/
+exports/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Logs
+*.log
+logs/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Frontend (si llegamos a meter)
+node_modules/
+dist/
+build/
+
+# Docker
+volumes/

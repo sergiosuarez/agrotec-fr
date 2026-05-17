@@ -1,0 +1,15 @@
+
+    <svg xmlns="http://www.w3.org/2000/svg" width="138.0" height="66.0" viewBox="0 0 138.0 66.0">
+      <!-- hull -->
+      <polygon fill="#1d3557" points="
+        12.0,33.0
+        48.0,12.0
+        126.0,12.0
+        126.0,54.0
+        48.0,54.0
+      "/>
+      <!-- deck structures -->
+      <rect x="72.0" y="21.0" width="24.0" height="24.0" fill="white" opacity="0.6"/>
+      <rect x="51.0" y="24.0" width="15.0" height="18.0" fill="white" opacity="0.5"/>
+    </svg>
+    

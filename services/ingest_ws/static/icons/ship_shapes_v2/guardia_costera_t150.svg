@@ -1,0 +1,15 @@
+
+    <svg xmlns="http://www.w3.org/2000/svg" width="198.0" height="90.0" viewBox="0 0 198.0 90.0">
+      <!-- hull -->
+      <polygon fill="#d62828" points="
+        9.0,45.0
+        54.0,18.0
+        180.0,18.0
+        189.0,45.0
+        180.0,72.0
+        54.0,72.0
+      "/>
+      <!-- cabin -->
+      <rect x="99.0" y="31.5" width="36.0" height="27.0" fill="white" opacity="0.7"/>
+    </svg>
+    

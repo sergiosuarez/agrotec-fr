@@ -1,0 +1,10 @@
+
+    <svg xmlns="http://www.w3.org/2000/svg" width="270.0" height="108.0" viewBox="0 0 270.0 108.0">
+      <!-- hull capsule -->
+      <rect x="36.0" y="27.0" width="198.0" height="54.0" rx="27.0" fill="#8d0801"/>
+      <!-- tanks -->
+      <circle cx="99.0" cy="54.0" r="13.5" fill="white" opacity="0.6"/>
+      <circle cx="144.0" cy="54.0" r="13.5" fill="white" opacity="0.6"/>
+      <circle cx="189.0" cy="54.0" r="13.5" fill="white" opacity="0.6"/>
+    </svg>
+    

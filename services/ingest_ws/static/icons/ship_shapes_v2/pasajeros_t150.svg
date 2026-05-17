@@ -1,0 +1,15 @@
+
+    <svg xmlns="http://www.w3.org/2000/svg" width="234.0" height="108.0" viewBox="0 0 234.0 108.0">
+      <!-- hull -->
+      <polygon fill="#457b9d" points="
+        18.0,54.0
+        54.0,22.5
+        180.0,22.5
+        216.0,54.0
+        180.0,85.5
+        54.0,85.5
+      "/>
+      <!-- superstructure -->
+      <rect x="72.0" y="36.0" width="90.0" height="36.0" fill="white" opacity="0.7"/>
+    </svg>
+    
