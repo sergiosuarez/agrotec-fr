@@ -46,11 +46,52 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@agrotec_db:5432/${POSTGRES_DB}
       REDIS_URL: redis://agrotec_redis:6379
+      THREDDS_URL: http://agrotec_thredds:8080
+      GFS_DIR: /data/actual
     expose:
       - "8000"
     volumes:
       - ./services/ingest_ws:/app
+      - gfs_data:/data/actual:ro
     command: ["bash", "uvicorn.sh"]
+    networks:
+      - agrotec-net
+
+  gfs_scheduler:
+    build:
+      context: ./services/gfs_scheduler
+    container_name: agrotec_gfs_scheduler
+    restart: unless-stopped
+    environment:
+      GFS_DIR: /data/actual
+      GFS_INTERVAL_HOURS: "6"
+      GFS_RETRY_MINUTES: "30"
+      GFS_LAT_MIN: "-5"
+      GFS_LAT_MAX: "1"
+      GFS_LON_MIN: "280"
+      GFS_LON_MAX: "282"
+    volumes:
+      - gfs_data:/data/actual
+    networks:
+      - agrotec-net
+
+  thredds:
+    image: unidata/thredds-docker:5.5
+    container_name: agrotec_thredds
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      JAVA_OPTS: "-Xmx1g -Xms512m -Djava.awt.headless=true"
+      TDS_CONTENT_ROOT_PATH: /usr/local/tomcat/content
+    volumes:
+      - gfs_data:/usr/local/tomcat/content/thredds/public/testdata/actual:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/thredds/catalog.html || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
     networks:
       - agrotec-net
 
@@ -59,6 +100,8 @@ volumes:
     name: agrotec-fr-dbdata
   redis_data:
     name: agrotec-fr-redisdata
+  gfs_data:
+    name: agrotec-fr-gfsdata
 
 networks:
   agrotec-net:
