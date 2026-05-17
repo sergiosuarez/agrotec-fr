@@ -1,0 +1,45 @@
+# =============================================================================
+# Reverse proxy nginx publico para Agrotec
+# Stack independiente que termina TLS y enruta los 2 subdominios
+# (agrotec.* y mergin.*) hacia los servicios internos.
+#
+# Requisitos:
+#   - Las redes 'agrotec-net' y 'mergin-net' deben existir (las crea
+#     agrotec-bk y mobile/mergin-server respectivamente)
+#   - Certificados Let's Encrypt en /etc/letsencrypt/live/<dominio>/
+#     (emitir con `certbot certonly --standalone -d agrotec.dominio.com`
+#     antes de levantar este stack)
+# =============================================================================
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: agrotec_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot
+    networks:
+      - agrotec-net
+      - mergin-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  certbot_webroot:
+    name: agrotec-certbot-webroot
+
+networks:
+  agrotec-net:
+    name: agrotec-net
+    external: true
+  mergin-net:
+    name: mergin-net
+    external: true
