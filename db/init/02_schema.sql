@@ -1,64 +1,108 @@
+-- ============================================================================
+-- Agrotec - Schema base PostGIS
+-- ============================================================================
+-- Modela: Hacienda > Parcela > Lote, Cultivo, Ortomosaico
+-- SRID 4326 (WGS84) para consistencia con WMS publicos de GeoNode/GeoServer.
 
-CREATE TABLE IF NOT EXISTS vessels (
-  mmsi         BIGINT PRIMARY KEY,
-  matricula    TEXT,
-  name         TEXT,
-  imo          TEXT,
-  type         TEXT,
-  flag         TEXT,
-  dms_enabled  BOOLEAN DEFAULT false,
-  photos       JSONB
+-- ---------------- Catalogo de cultivos -------------------------------------
+CREATE TABLE IF NOT EXISTS cultivo (
+    id              BIGSERIAL PRIMARY KEY,
+    nombre          TEXT NOT NULL UNIQUE,
+    nombre_cientifico TEXT,
+    ciclo_dias      INTEGER,
+    perenne         BOOLEAN DEFAULT FALSE,
+    metadata        JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS positions (
-  mmsi          BIGINT REFERENCES vessels(mmsi) ON DELETE CASCADE,
-  ts            TIMESTAMPTZ NOT NULL,
-  geom          GEOGRAPHY(POINT, 4326) NOT NULL,
-  sog_knots     DOUBLE PRECISION,
-  cog_deg       DOUBLE PRECISION,
-  heading_deg   DOUBLE PRECISION,
-  source        TEXT,
-  voyage_id     BIGINT,
-  extra         JSONB,
-  PRIMARY KEY (mmsi, ts)
+-- ---------------- Hacienda --------------------------------------------------
+CREATE TABLE IF NOT EXISTS hacienda (
+    id              BIGSERIAL PRIMARY KEY,
+    nombre          TEXT NOT NULL,
+    propietario     TEXT,
+    codigo          TEXT UNIQUE,
+    ubicacion       GEOGRAPHY(POINT, 4326),
+    area_ha         NUMERIC(12, 4),
+    contacto        JSONB DEFAULT '{}'::jsonb,
+    metadata        JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_positions_geom ON positions USING GIST(geom);
-CREATE INDEX IF NOT EXISTS idx_positions_mmsi_ts ON positions (mmsi, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_hacienda_ubicacion ON hacienda USING GIST(ubicacion);
 
-CREATE TABLE IF NOT EXISTS alerts (
-  id        BIGSERIAL PRIMARY KEY,
-  mmsi      BIGINT REFERENCES vessels(mmsi) ON DELETE SET NULL,
-  ts        TIMESTAMPTZ NOT NULL,
-  type      TEXT,
-  severity  TEXT,
-  geom      GEOGRAPHY(POINT, 4326),
-  details   JSONB
+-- ---------------- Parcela (lote grande dentro de una hacienda) --------------
+CREATE TABLE IF NOT EXISTS parcela (
+    id              BIGSERIAL PRIMARY KEY,
+    hacienda_id     BIGINT NOT NULL REFERENCES hacienda(id) ON DELETE CASCADE,
+    nombre          TEXT NOT NULL,
+    codigo          TEXT,
+    geom            GEOMETRY(MULTIPOLYGON, 4326) NOT NULL,
+    area_ha         NUMERIC(12, 4) GENERATED ALWAYS AS (
+                        ST_Area(geom::geography) / 10000.0
+                    ) STORED,
+    metadata        JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (hacienda_id, codigo)
 );
-CREATE INDEX IF NOT EXISTS idx_alerts_mmsi_ts ON alerts (mmsi, ts DESC);
+CREATE INDEX IF NOT EXISTS idx_parcela_geom ON parcela USING GIST(geom);
+CREATE INDEX IF NOT EXISTS idx_parcela_hacienda ON parcela (hacienda_id);
 
-CREATE TABLE IF NOT EXISTS voyages (
-  id            BIGSERIAL PRIMARY KEY,
-  mmsi          BIGINT REFERENCES vessels(mmsi) ON DELETE CASCADE,
-  dep_port      TEXT,
-  dep_time      TIMESTAMPTZ,
-  arr_port      TEXT,
-  arr_time      TIMESTAMPTZ,
-  planned_route GEOGRAPHY(LINESTRING, 4326),
-  notes         TEXT
+-- ---------------- Lote (subdivision de parcela, opcional) -------------------
+CREATE TABLE IF NOT EXISTS lote (
+    id              BIGSERIAL PRIMARY KEY,
+    parcela_id      BIGINT NOT NULL REFERENCES parcela(id) ON DELETE CASCADE,
+    nombre          TEXT NOT NULL,
+    cultivo_id      BIGINT REFERENCES cultivo(id) ON DELETE SET NULL,
+    fecha_siembra   DATE,
+    geom            GEOMETRY(MULTIPOLYGON, 4326) NOT NULL,
+    area_ha         NUMERIC(12, 4) GENERATED ALWAYS AS (
+                        ST_Area(geom::geography) / 10000.0
+                    ) STORED,
+    estado          TEXT DEFAULT 'activo',
+    metadata        JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_lote_geom ON lote USING GIST(geom);
+CREATE INDEX IF NOT EXISTS idx_lote_parcela ON lote (parcela_id);
 
-CREATE TABLE IF NOT EXISTS geofences (
-  id        BIGSERIAL PRIMARY KEY,
-  name      TEXT UNIQUE,
-  category  TEXT,
-  geom      GEOGRAPHY(POLYGON, 4326),
-  active    BOOLEAN DEFAULT TRUE
+-- ---------------- Ortomosaico (referencia a capa de GeoNode/GeoServer) ------
+CREATE TABLE IF NOT EXISTS ortomosaico (
+    id                  BIGSERIAL PRIMARY KEY,
+    parcela_id          BIGINT REFERENCES parcela(id) ON DELETE SET NULL,
+    hacienda_id         BIGINT REFERENCES hacienda(id) ON DELETE CASCADE,
+    nombre              TEXT NOT NULL,
+    geonode_alternate   TEXT NOT NULL UNIQUE,
+    geonode_uuid        UUID,
+    fecha_vuelo         DATE,
+    resolucion_m        NUMERIC(6, 4),
+    geom_bbox           GEOMETRY(POLYGON, 4326),
+    srid_origen         INTEGER,
+    metadata            JSONB DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_geofences_geom ON geofences USING GIST(geom);
+CREATE INDEX IF NOT EXISTS idx_ortomosaico_bbox ON ortomosaico USING GIST(geom_bbox);
+CREATE INDEX IF NOT EXISTS idx_ortomosaico_parcela ON ortomosaico (parcela_id);
+CREATE INDEX IF NOT EXISTS idx_ortomosaico_hacienda ON ortomosaico (hacienda_id);
+
+-- ---------------- Trigger updated_at ----------------------------------------
+CREATE OR REPLACE FUNCTION agrotec_set_updated_at() RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 DO $$
+DECLARE t TEXT;
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
-    PERFORM create_hypertable('positions', by_range('ts'), if_not_exists => TRUE);
-  END IF;
-END$$;
+    FOREACH t IN ARRAY ARRAY['hacienda', 'parcela', 'lote']::TEXT[] LOOP
+        EXECUTE format(
+            'DROP TRIGGER IF EXISTS trg_%I_updated ON %I;
+             CREATE TRIGGER trg_%I_updated BEFORE UPDATE ON %I
+             FOR EACH ROW EXECUTE FUNCTION agrotec_set_updated_at();',
+            t, t, t, t
+        );
+    END LOOP;
+END $$;

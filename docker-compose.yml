@@ -44,16 +44,15 @@ services:
         condition: service_started
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@agrotec_db:5432/${POSTGRES_DB}
-      REDIS_URL: redis://agrotec_redis:6379
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@agrotec_db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://agrotec_redis:6379/0
       THREDDS_URL: http://agrotec_thredds:8080
       GFS_DIR: /data/actual
+      APP_WORKERS: "2"
     expose:
       - "8000"
     volumes:
-      - ./services/ingest_ws:/app
       - gfs_data:/data/actual:ro
-    command: ["bash", "uvicorn.sh"]
     networks:
       - agrotec-net
 
