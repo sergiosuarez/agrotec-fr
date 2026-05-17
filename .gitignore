@@ -42,3 +42,7 @@ build/
 
 # Docker
 volumes/
+
+# Mobile / Mergin
+mobile/**/.env
+mobile/**/data/
