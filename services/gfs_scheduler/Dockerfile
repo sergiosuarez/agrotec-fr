@@ -4,7 +4,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libeccodes0 \
         libeccodes-tools \
-        libnetcdf19 \
+        libnetcdf22 \
         ca-certificates \
         curl \
     && rm -rf /var/lib/apt/lists/*

@@ -1,5 +1,11 @@
-requests==2.32.3
-xarray==2024.10.0
-cfgrib==0.9.14.1
-netCDF4==1.7.2
-numpy==2.0.2
+# Versiones probadas con todo "latest" al 2026-05-17.
+# Pin a familia mayor con `~=` (acepta patches) para evitar regresiones.
+# Nota: pandas 3.x requiere xarray >= 2025.x (antes rompia con AssertionError en
+# xarray.coding.times.to_timedelta_unboxed). xarray 2026.4 ya lo soporta.
+requests~=2.32
+numpy~=2.4
+pandas~=3.0
+xarray~=2026.4
+cfgrib~=0.9.15
+eccodes~=2.47
+netCDF4~=1.7
