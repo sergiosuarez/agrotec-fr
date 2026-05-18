@@ -19,13 +19,25 @@
         }
         * { box-sizing: border-box; }
         html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); font-size: 14px; }
-        #app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
+        #app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; transition: grid-template-columns .25s ease; }
+        #app.sidebar-collapsed { grid-template-columns: 0 1fr; }
 
         /* --- SIDEBAR --- */
         #sidebar { background: var(--bg); border-right: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; }
-        #sidebar-header { padding: 12px 16px; background: var(--palmar-green); color: white; }
+        #sidebar-header { padding: 12px 16px; background: var(--palmar-green); color: white; display: flex; align-items: flex-start; gap: 8px; }
+        #sidebar-header .title-block { flex: 1; }
         #sidebar-header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
         #sidebar-header .subtitle { font-size: .75rem; opacity: .85; margin-top: 2px; }
+        /* Boton flotante para colapsar/desplegar sidebar */
+        #sidebar-toggle {
+            position: absolute; top: 12px; left: 348px;
+            z-index: 6; background: var(--palmar-green); color: white;
+            border: none; width: 22px; height: 36px; border-radius: 0 4px 4px 0;
+            cursor: pointer; font-size: .85rem; font-weight: bold;
+            box-shadow: 1px 1px 4px rgba(0,0,0,.2);
+            transition: left .25s ease;
+        }
+        #app.sidebar-collapsed #sidebar-toggle { left: 0; }
 
         #sidebar-search { padding: 8px 12px; background: white; border-bottom: 1px solid var(--border); }
         #sidebar-search input { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: .9rem; }
@@ -43,8 +55,14 @@
             color: var(--palmar-green-dark); margin: 4px 0 6px;
             padding-bottom: 4px; border-bottom: 1px solid var(--border);
             display: flex; justify-content: space-between; align-items: center;
+            cursor: pointer; user-select: none;
         }
+        .category h2:hover { background: #e8f0e6; }
         .category h2 .count { font-weight: 400; color: var(--muted); font-size: .7rem; }
+        .category h2 .chev { transition: transform .15s ease; display: inline-block; margin-right: 4px; }
+        .category.collapsed h2 .chev { transform: rotate(-90deg); }
+        .category.collapsed .layer-item,
+        .category.collapsed .opacity-row { display: none; }
 
         .layer-item { background: white; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
         .layer-item:hover { background: #fafffa; }
@@ -73,7 +91,10 @@
         #map { width: 100%; height: 100%; }
 
         .ml-overlay { position: absolute; background: var(--panel); padding: 4px 10px; font-size: .72rem; border-radius: 4px; backdrop-filter: blur(4px); z-index: 5; }
-        #coords { bottom: 10px; left: 10px; }
+        /* coords queda en esquina inferior izq cuando el panel meteo esta cerrado,
+           y sube por encima del panel cuando este se abre (transicion suave) */
+        #coords { bottom: 10px; left: 10px; transition: bottom .25s ease; }
+        #map-wrap.meteo-open #coords { bottom: 390px; }   /* 380px panel + 10px */
         #toolbar { top: 10px; left: 10px; display: flex; gap: 4px; padding: 4px; }
         #toolbar button { background: white; border: 1px solid var(--border); padding: 6px 10px; font-size: .8rem; border-radius: 3px; cursor: pointer; color: var(--text); }
         #toolbar button:hover { background: var(--palmar-green); color: white; border-color: var(--palmar-green); }
@@ -90,10 +111,13 @@
 
         /* --- ADMIN MODAL --- */
         #admin-overlay { display: none; position: fixed; inset: 0; background: #00000080; z-index: 100; align-items: center; justify-content: center; }
-        #admin-modal { background: white; padding: 20px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        #admin-modal { background: white; padding: 20px; border-radius: 8px; max-width: 720px; width: 92%; max-height: 85vh; overflow-y: auto; }
         #admin-modal h2 { margin-top: 0; color: var(--palmar-green-dark); }
         #admin-modal table { width: 100%; border-collapse: collapse; }
         #admin-modal th, #admin-modal td { padding: 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: .85rem; }
+        #admin-modal th[title] { cursor: help; border-bottom: 2px dotted var(--palmar-green); }
+        #admin-modal tr.hidden-layer td { opacity: .45; }
+        #admin-modal .help { background: #f7fbf7; border-left: 3px solid var(--palmar-green); padding: 8px 12px; font-size: .8rem; margin: 8px 0 12px; color: var(--text); }
         #admin-modal button.close { background: var(--palmar-green); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 12px; }
 
         .empty { color: var(--muted); font-style: italic; padding: 12px 0; font-size: .85rem; text-align: center; }
@@ -103,7 +127,7 @@
         #bottom-panel {
             position: absolute; bottom: 0; left: 0; right: 0;
             background: white; border-top: 1px solid var(--border);
-            height: 340px;
+            height: 380px;
             transition: transform .25s ease;
             transform: translateY(100%);
             z-index: 4;
@@ -181,6 +205,8 @@
         </div>
     </aside>
 
+    <button id="sidebar-toggle" title="Mostrar/ocultar panel de capas">‹</button>
+
     <main id="map-wrap">
         <div id="map"></div>
         <div class="ml-overlay" id="toolbar">
@@ -213,8 +239,20 @@
 <div id="admin-overlay">
     <div id="admin-modal">
         <h2>⚙ Admin del visor</h2>
-        <p style="font-size:.85rem;color:var(--muted);">Marca como <b>destacadas</b> las capas que quieres que aparezcan por defecto activadas. Define el orden de aparición.</p>
-        <table id="admin-table"><thead><tr><th>Capa</th><th>Destacada</th><th>Orden</th></tr></thead><tbody></tbody></table>
+        <div class="help">
+            <b>Visible</b>: si está apagado, la capa <b>no aparece</b> en el sidebar del visor (queda oculta para los usuarios).<br>
+            <b>Destacada</b>: si está prendida, la capa se <b>auto-activa</b> al cargar el visor (sale prendida por defecto). No afecta su visibilidad en el listado.<br>
+            <b>Orden</b>: número usado para ordenar el listado (menor → arriba).
+        </div>
+        <table id="admin-table">
+            <thead><tr>
+                <th>Capa</th>
+                <th title="Si esta apagado, la capa no aparece en el sidebar del visor">Visible</th>
+                <th title="Si esta prendida, la capa sale activada al cargar el visor">Destacada</th>
+                <th title="Numero menor = aparece mas arriba en el listado">Orden</th>
+            </tr></thead>
+            <tbody></tbody>
+        </table>
         <button class="close">Cerrar</button>
     </div>
 </div>
@@ -289,13 +327,25 @@ function renderLayersTab() {
 
     const CAT_LABELS = { ortomosaicos: '🛩 Ortomosaicos drone', haciendas: '🌾 Haciendas y lotes', vectoriales: '📐 Vectoriales', limites: '🗺 Límites administrativos', infraestructura: '🛣 Infraestructura', raster_otros: '🖼 Otros rasters', otros: '📦 Otros' };
 
-    const html = Object.entries(byCat).map(([cat, items]) => `
-        <div class="category">
-            <h2>${CAT_LABELS[cat] || cat} <span class="count">${items.length}</span></h2>
+    const html = Object.entries(byCat).map(([cat, items]) => {
+        const collapsed = state.collapsedCats?.[cat] ? 'collapsed' : '';
+        return `
+        <div class="category ${collapsed}" data-cat="${cat}">
+            <h2 data-cat="${cat}"><span><span class="chev">▼</span>${CAT_LABELS[cat] || cat}</span> <span class="count">${items.length}</span></h2>
             ${items.map(l => renderLayerItem(l)).join('')}
         </div>
-    `).join('');
+    `;}).join('');
     document.getElementById('tab-layers').innerHTML = html;
+
+    // Toggle colapso de categorias
+    document.querySelectorAll('#tab-layers .category h2').forEach(h => {
+        h.addEventListener('click', e => {
+            const cat = h.dataset.cat;
+            state.collapsedCats ||= {};
+            state.collapsedCats[cat] = !state.collapsedCats[cat];
+            h.closest('.category').classList.toggle('collapsed');
+        });
+    });
 
     // Bind events
     document.querySelectorAll('.layer-item input[type="checkbox"]').forEach(cb => {
@@ -536,29 +586,46 @@ document.getElementById('btn-share').addEventListener('click', () => {
 });
 
 // --- Admin modal ---
-document.getElementById('btn-admin').addEventListener('click', () => {
+document.getElementById('btn-admin').addEventListener('click', async () => {
+    // Pedimos las capas con include_hidden=true para poder editar tambien las ocultas
+    let allLayers;
+    try {
+        const r = await fetch(`${API}/api/v1/layers?include_hidden=true`);
+        allLayers = await r.json();
+    } catch {
+        allLayers = state.layers;   // fallback
+    }
     const tbody = document.querySelector('#admin-table tbody');
-    tbody.innerHTML = state.layers.map(l => `
-        <tr>
+    tbody.innerHTML = allLayers.map(l => `
+        <tr class="${l.visible === false ? 'hidden-layer' : ''}" data-alt="${l.alternate}">
             <td>${l.title}<br><small style="color:var(--muted);">${l.alternate}</small></td>
+            <td><input type="checkbox" data-alt="${l.alternate}" data-field="visible"  ${l.visible !== false ? 'checked' : ''}></td>
             <td><input type="checkbox" data-alt="${l.alternate}" data-field="featured" ${l.featured ? 'checked' : ''}></td>
-            <td><input type="number" data-alt="${l.alternate}" data-field="order" value="${l.order}" style="width:60px;"></td>
+            <td><input type="number"   data-alt="${l.alternate}" data-field="order" value="${l.order}" style="width:60px;"></td>
         </tr>
     `).join('');
     document.getElementById('admin-overlay').style.display = 'flex';
     tbody.querySelectorAll('input').forEach(inp => {
         inp.addEventListener('change', async e => {
             const alt = e.target.dataset.alt, field = e.target.dataset.field;
-            const value = field === 'featured' ? e.target.checked : parseInt(e.target.value);
+            const isCheck = e.target.type === 'checkbox';
+            const value = isCheck ? e.target.checked : parseInt(e.target.value);
             const body = { alternate: alt, [field]: value };
             await fetch(`${API}/api/v1/visor/config`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-            const layer = state.layers.find(l => l.alternate === alt);
-            if (layer) layer[field] = value;
+            // Reflejar visualmente en la fila si fue toggle de visible
+            if (field === 'visible') {
+                e.target.closest('tr').classList.toggle('hidden-layer', !value);
+            }
         });
     });
 });
-document.querySelector('#admin-modal button.close').addEventListener('click', () => {
+document.querySelector('#admin-modal button.close').addEventListener('click', async () => {
     document.getElementById('admin-overlay').style.display = 'none';
+    // Releer capas desde el backend para reflejar cambios de visible/featured/order
+    try {
+        const r = await fetch(`${API}/api/v1/layers`);
+        state.layers = await r.json();
+    } catch {}
     renderLayersTab();
 });
 
@@ -570,6 +637,7 @@ let chartPron = null, chartProf = null;
 
 function openMeteoPanel(lat, lng) {
     document.getElementById('bottom-panel').classList.add('open');
+    document.getElementById('map-wrap').classList.add('meteo-open');
     document.getElementById('meteo-coords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     setTimeout(() => { map.resize(); chartPron?.resize(); chartProf?.resize(); }, 280);
 
@@ -579,6 +647,7 @@ function openMeteoPanel(lat, lng) {
 
 function closeMeteoPanel() {
     document.getElementById('bottom-panel').classList.remove('open');
+    document.getElementById('map-wrap').classList.remove('meteo-open');
     setTimeout(() => map.resize(), 280);
 }
 
@@ -700,11 +769,12 @@ async function loadMeteoProf(lat, lng) {
         // Perfil vertical: niveles en eje Y (presion), valor en eje X
         chartProf.setOption({
             tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-            legend: { data: ['Temperatura (°C)', 'Humedad relativa (%)'], top: 4, textStyle: { fontSize: 11 } },
-            grid: { left: 60, right: 80, top: 36, bottom: 36 },
+            legend: { data: ['Temperatura (°C)', 'Humedad relativa (%)'], top: 4, textStyle: { fontSize: 11 }, itemGap: 12 },
+            // Margen superior generoso: legenda (16px) + nombre eje X-top "HR (%)" (12px) + aire (28px) = 56px
+            grid: { left: 60, right: 70, top: 70, bottom: 40 },
             xAxis: [
-                { type: 'value', name: 'Temp (°C)', position: 'bottom', nameTextStyle: { fontSize: 10 }, axisLabel: { color: '#e74c3c' } },
-                { type: 'value', name: 'HR (%)', position: 'top', nameTextStyle: { fontSize: 10 }, axisLabel: { color: '#3498db' }, min: 0, max: 100 }
+                { type: 'value', name: 'Temp (°C)', position: 'bottom', nameTextStyle: { fontSize: 10 }, axisLabel: { color: '#e74c3c', fontSize: 10 } },
+                { type: 'value', name: 'HR (%)',    position: 'top',    nameTextStyle: { fontSize: 10 }, nameGap: 22, axisLabel: { color: '#3498db', fontSize: 10 }, min: 0, max: 100 }
             ],
             yAxis: {
                 type: 'category',
@@ -722,6 +792,15 @@ async function loadMeteoProf(lat, lng) {
         el.innerHTML = `<div class="panel-loading" style="color:#c00;">Error: ${err.message}</div>`;
     }
 }
+
+// Sidebar colapsable
+document.getElementById('sidebar-toggle').addEventListener('click', () => {
+    const app = document.getElementById('app');
+    app.classList.toggle('sidebar-collapsed');
+    const btn = document.getElementById('sidebar-toggle');
+    btn.textContent = app.classList.contains('sidebar-collapsed') ? '›' : '‹';
+    setTimeout(() => { map.resize(); chartPron?.resize(); chartProf?.resize(); }, 280);
+});
 
 // Botones panel meteo
 document.getElementById('btn-close-meteo').addEventListener('click', closeMeteoPanel);

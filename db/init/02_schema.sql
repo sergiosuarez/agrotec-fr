@@ -111,11 +111,13 @@ END $$;
 CREATE TABLE IF NOT EXISTS visor_layer_config (
     id              BIGSERIAL PRIMARY KEY,
     alternate       TEXT NOT NULL UNIQUE,
-    featured        BOOLEAN DEFAULT FALSE,
+    visible         BOOLEAN DEFAULT TRUE,    -- si false, la capa NO aparece en el sidebar del visor
+    featured        BOOLEAN DEFAULT FALSE,   -- si true, se auto-activa al cargar el visor
     "order"         INTEGER DEFAULT 999,
     default_opacity NUMERIC(3, 2) DEFAULT 1.0,
     color           TEXT,
     metadata        JSONB DEFAULT '{}'::jsonb,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE visor_layer_config ADD COLUMN IF NOT EXISTS visible BOOLEAN DEFAULT TRUE;
 CREATE INDEX IF NOT EXISTS idx_visor_layer_featured ON visor_layer_config (featured, "order") WHERE featured;

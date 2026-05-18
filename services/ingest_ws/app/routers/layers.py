@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,7 @@ class LayerOut(BaseModel):
     thumbnail_url: str | None = None
     bbox: list[float] | None = None         # [minx, miny, maxx, maxy] en WGS84
     # Config local del visor (puede ser None si no esta configurada)
+    visible: bool = True                    # si False, no aparece en el sidebar (oculta del visor)
     featured: bool = False                  # si default-on en el visor
     order: int = 999                        # orden de display
     default_opacity: float = 1.0
@@ -103,8 +104,15 @@ def _bbox_from_dataset(ds: dict[str, Any]) -> list[float] | None:
 
 
 @router.get("", response_model=list[LayerOut])
-async def list_layers(db: Session = Depends(get_db)) -> list[LayerOut]:
-    """Lista TODAS las capas publicadas (raster + vector) con metadata para visor."""
+async def list_layers(
+    db: Session = Depends(get_db),
+    include_hidden: bool = Query(False, description="incluir capas con visible=False (solo admin)"),
+) -> list[LayerOut]:
+    """Lista TODAS las capas publicadas (raster + vector) con metadata para visor.
+
+    Por defecto omite las que tienen `visible=False` en visor_layer_config (que el admin
+    marco como ocultas). Con `include_hidden=true` las incluye (para el modal admin).
+    """
     datasets = await geonode.list_datasets(page_size=200)
     # Indice de config local por alternate
     config_idx = {c.alternate: c for c in db.query(VisorLayerConfig).all()}
@@ -116,6 +124,9 @@ async def list_layers(db: Session = Depends(get_db)) -> list[LayerOut]:
             continue
         subtype = d.get("subtype") or "vector"
         cfg = config_idx.get(alt)
+        visible = bool(cfg.visible) if cfg else True
+        if not visible and not include_hidden:
+            continue
 
         out.append(LayerOut(
             alternate=alt,
@@ -127,6 +138,7 @@ async def list_layers(db: Session = Depends(get_db)) -> list[LayerOut]:
             legend_url=_legend_url(alt),
             thumbnail_url=d.get("thumbnail_url"),
             bbox=_bbox_from_dataset(d),
+            visible=visible,
             featured=bool(cfg.featured) if cfg else False,
             order=cfg.order if cfg else 999,
             default_opacity=float(cfg.default_opacity) if cfg else 1.0,

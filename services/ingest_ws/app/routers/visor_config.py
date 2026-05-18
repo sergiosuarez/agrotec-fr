@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/v1/visor", tags=["visor-config"])
 
 class LayerConfigIn(BaseModel):
     alternate: str
+    visible: bool | None = None
     featured: bool | None = None
     order: int | None = None
     default_opacity: float | None = None
@@ -36,6 +37,8 @@ def upsert_layer_config(payload: LayerConfigIn, db: Session = Depends(get_db)) -
         )
         db.add(cfg)
 
+    if payload.visible is not None:
+        cfg.visible = payload.visible
     if payload.featured is not None:
         cfg.featured = payload.featured
     if payload.order is not None:
@@ -51,6 +54,7 @@ def upsert_layer_config(payload: LayerConfigIn, db: Session = Depends(get_db)) -
 
     return {
         "alternate": cfg.alternate,
+        "visible": cfg.visible,
         "featured": cfg.featured,
         "order": cfg.order,
         "default_opacity": float(cfg.default_opacity),

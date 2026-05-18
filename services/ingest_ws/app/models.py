@@ -112,6 +112,7 @@ class VisorLayerConfig(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     alternate: Mapped[str] = mapped_column(String, unique=True, index=True)
+    visible: Mapped[bool] = mapped_column(Boolean, default=True)
     featured: Mapped[bool] = mapped_column(Boolean, default=False)
     order: Mapped[int] = mapped_column(Integer, default=999)
     default_opacity: Mapped[Decimal] = mapped_column(Numeric(3, 2), default=1.0)
