@@ -9,6 +9,12 @@ redis~=5.0
 httpx~=0.27
 python-dotenv~=1.0
 
+# Para lectura de NetCDF GFS (endpoints /api/v1/gfs/point y /profile)
+numpy~=2.4
+pandas~=3.0
+xarray~=2026.4
+netCDF4~=1.7
+
 # Para offline bundles (Tarea futura: MBTiles desde COG)
 # rasterio~=1.4
 # rio-tiler~=7.0

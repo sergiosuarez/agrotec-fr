@@ -262,6 +262,12 @@ function renderLayersTab() {
             fitToLayer(state.layers.find(l => l.alternate === alt));
         });
     });
+    document.querySelectorAll('.layer-item .up-btn').forEach(b => {
+        b.addEventListener('click', e => moveLayerUp(e.target.dataset.alt));
+    });
+    document.querySelectorAll('.layer-item .dn-btn').forEach(b => {
+        b.addEventListener('click', e => moveLayerDown(e.target.dataset.alt));
+    });
     document.querySelectorAll('.opacity-row input[type="range"]').forEach(r => {
         r.addEventListener('input', e => {
             const alt = e.target.dataset.alt;
@@ -280,6 +286,8 @@ function renderLayerItem(l) {
             <label class="name" for="${id}" title="${l.alternate}">${l.title}
                 <span class="badge ${l.subtype}">${l.subtype}</span>
             </label>
+            ${active ? `<button class="icon-btn up-btn" data-alt="${l.alternate}" title="Subir z-order">▲</button>
+                       <button class="icon-btn dn-btn" data-alt="${l.alternate}" title="Bajar z-order">▼</button>` : ''}
             <button class="icon-btn fit-btn" data-alt="${l.alternate}" title="Zoom a capa">⊕</button>
         </div>
         ${active ? `<div class="opacity-row"><span>opacidad</span><input type="range" data-alt="${l.alternate}" min="0" max="100" value="${Math.round(opacity*100)}"></div>` : ''}
@@ -290,16 +298,32 @@ function renderLayerItem(l) {
 function addWmsLayer(layer) {
     const id = 'l_' + layer.alternate.replace(/[^a-z0-9]/gi, '_');
     if (map.getLayer(id)) return;
+    // Opacidad por defecto: rasters al 100%, vectores polygon al 60% (no tapan el fondo)
+    let defaultOp = layer.default_opacity || 1.0;
+    if (layer.subtype === 'vector' && defaultOp === 1.0) defaultOp = 0.6;
     map.addSource(id, {
         type: 'raster',
         tiles: [layer.wms_url],
         tileSize: 512,
         attribution: 'IDEPalma / GeoServer'
     });
-    map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': layer.default_opacity } });
-    state.activeLayers[layer.alternate] = { opacity: layer.default_opacity, sourceId: id, subtype: layer.subtype };
+    map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': defaultOp } });
+    state.activeLayers[layer.alternate] = { opacity: defaultOp, sourceId: id, subtype: layer.subtype };
     renderLayersTab();
     setTimeout(updateUrlState, 50);
+}
+
+function moveLayerUp(alt) {
+    const info = state.activeLayers[alt];
+    if (!info) return;
+    map.moveLayer(info.sourceId);   // mueve al tope
+}
+function moveLayerDown(alt) {
+    const info = state.activeLayers[alt];
+    if (!info) return;
+    // Buscar la primera capa activa que NO sea esta y poner esta antes
+    const others = Object.values(state.activeLayers).filter(l => l.sourceId !== info.sourceId);
+    if (others.length > 0) map.moveLayer(info.sourceId, others[0].sourceId);
 }
 
 function removeWmsLayer(alt) {
@@ -319,17 +343,29 @@ function setOpacity(alt, op) {
     info.opacity = op;
 }
 
+function isValidBbox(b) {
+    return b && b.length === 4 &&
+        Math.abs(b[0]) <= 180 && Math.abs(b[2]) <= 180 &&
+        Math.abs(b[1]) <= 90  && Math.abs(b[3]) <= 90 &&
+        b[0] < b[2] && b[1] < b[3];
+}
+
 function fitToLayer(layer) {
-    if (!layer?.bbox) { alert('Sin bbox disponible'); return; }
+    if (!isValidBbox(layer?.bbox)) {
+        alert('Sin bbox WGS84 disponible para esta capa (probable que tenga CRS local UTM sin reproyectar)');
+        return;
+    }
     map.fitBounds([[layer.bbox[0], layer.bbox[1]], [layer.bbox[2], layer.bbox[3]]], { padding: 50, maxZoom: 20 });
 }
 
 function fitToFeatured() {
-    const featured = state.layers.filter(l => l.featured && l.bbox);
+    const featured = state.layers.filter(l => l.featured && isValidBbox(l.bbox));
     if (featured.length === 0) return;
     const lons = featured.flatMap(l => [l.bbox[0], l.bbox[2]]);
     const lats = featured.flatMap(l => [l.bbox[1], l.bbox[3]]);
-    map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 50 });
+    try {
+        map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 50 });
+    } catch (e) { console.warn('fitToFeatured failed:', e); }
 }
 
 // --- Cambio de mapa base preservando capas WMS ---

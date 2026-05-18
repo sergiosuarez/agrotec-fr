@@ -78,14 +78,27 @@ def _categorize(alternate: str, subtype: str) -> str:
 
 
 def _bbox_from_dataset(ds: dict[str, Any]) -> list[float] | None:
-    """Extrae bbox [minx, miny, maxx, maxy] en WGS84 desde la respuesta de GeoNode."""
-    bbox_poly = ds.get("bbox_polygon")
-    if bbox_poly and isinstance(bbox_poly, dict):
+    """Extrae bbox [minx, miny, maxx, maxy] en WGS84 (lat/lon).
+
+    GeoNode expone:
+      - bbox_polygon: en el CRS NATIVO de la capa (puede ser UTM, etc.) — NO usar para MapLibre
+      - ll_bbox_polygon: SIEMPRE en EPSG:4326 (lat/lon) — usar este
+
+    Prioridad: ll_bbox_polygon > bbox_polygon (solo si los valores parecen lat/lon).
+    """
+    for key in ("ll_bbox_polygon", "bbox_polygon"):
+        bbox_poly = ds.get(key)
+        if not bbox_poly or not isinstance(bbox_poly, dict):
+            continue
         coords = bbox_poly.get("coordinates", [[]])
-        if coords and coords[0]:
-            lons = [p[0] for p in coords[0]]
-            lats = [p[1] for p in coords[0]]
-            return [min(lons), min(lats), max(lons), max(lats)]
+        if not coords or not coords[0]:
+            continue
+        lons = [p[0] for p in coords[0]]
+        lats = [p[1] for p in coords[0]]
+        bbox = [min(lons), min(lats), max(lons), max(lats)]
+        # Validar rango lat/lon (UTM tiene valores >> 180)
+        if abs(bbox[0]) <= 180 and abs(bbox[2]) <= 180 and abs(bbox[1]) <= 90 and abs(bbox[3]) <= 90:
+            return bbox
     return None
 
 
