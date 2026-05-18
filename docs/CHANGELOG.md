@@ -7,6 +7,11 @@
 ## Rebrand dominio — 2026-05-18 (tarde)
 
 - Dominio del sistema migrado de `agrotec.desarrollowebsite.com` → `idepalma.desarrollowebsite.com` (rename limpio, sin redirect).
+- **Fixes post-rename necesarios** (URLs persistidas en BD del catálogo y configs internas que no se autoactualizan al cambiar SITEURL):
+  - `UPDATE base_resourcebase/base_link/layers_dataset SET ... = REPLACE(..., agrotec, idepalma)` — **281 filas** con URLs absolutas hacia el dominio viejo (thumbnails, WMS/WFS links de cada dataset, ows_url).
+  - `PUT /geoserver/rest/settings` con `proxyBaseUrl = https://idepalma.desarrollowebsite.com/geoserver` — antes apuntaba a un subpath legacy `/agrotec-geonode/geoserver` que ensuciaba GetCapabilities.
+  - `UPDATE oauth2_provider_application SET redirect_uris = '... new domain ...'` + `DELETE FROM oauth2_provider_accesstoken/refreshtoken/grant` + `DELETE FROM django_session` — tokens y sesiones invalidadas al cambiar SITEURL, causaban 401 perpetuo en `/api/o/v4/userinfo`.
+  - **`HTTP_PORT=8085 → 80` y `HTTPS_PORT=8445 → 443`** en `bk/.env` — MapStore inyectaba ese puerto en las URLs absolutas que pedía proxear (`/proxy/?url=https://idepalma...:8085/api/v2/resources`), causando timeouts (499) y dejando el catálogo "loading" para siempre. El puerto interno solo es accesible por localhost del host, no por el dominio público.
 - Cert LE nuevo emitido vía `certbot --standalone` (downtime ~30 s del proxy). Cert viejo `agrotec.*` borrado.
 - nginx StreamTrack (`/opt/streamtrack/nginx/nginx.conf`) actualizado: server blocks 80+443 con el nuevo `server_name` y rutas de cert.
 - `.env` de ambos stacks (`bk/` GeoNode y `fr/` visor) actualizados: `SITEURL`, `ALLOWED_HOSTS`, `NGINX_BASE_URL`, `HTTP_HOST`, `GEOSERVER_WEB_UI_LOCATION`, `GEONODE_PUBLIC_*`, `GEONODE_HOST_HEADER`. Containers afectados recreados con `--force-recreate`.
