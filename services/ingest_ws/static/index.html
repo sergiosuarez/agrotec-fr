@@ -605,16 +605,24 @@ async function loadMeteoPron(lat, lng) {
             symbolRotate: dir   // ECharts rota desde el norte hacia el sentido del viento
         }));
 
+        // Indice por timestamp -> wind, para tooltip O(1)
+        const windByTs = Object.fromEntries(d.wind.map(([t, spd, dir]) => [t, [spd, dir]]));
+
         chartPron.setOption({
             tooltip: {
-                trigger: 'axis', axisPointer: { type: 'cross' },
+                trigger: 'axis',
+                axisPointer: { type: 'cross', axis: 'x' },   // solo X: evita matchear toda la categoria Y
                 formatter: (params) => {
+                    if (!params.length) return '';
                     const t = new Date(params[0].value[0]).toLocaleString();
                     let html = `<b>${t}</b><br>`;
+                    const seen = new Set();
                     params.forEach(p => {
-                        if (p.seriesName === 'Viento') {
-                            const w = d.wind.find(w => w[0] === p.value[0]);
-                            if (w) html += `${p.marker} ${p.seriesName}: ${w[1].toFixed(1)} m/s · ${w[2].toFixed(0)}°<br>`;
+                        if (seen.has(p.seriesName)) return;   // dedupe por serie
+                        seen.add(p.seriesName);
+                        if (p.seriesName === 'Viento (10 m)') {
+                            const w = windByTs[p.value[0]];
+                            if (w) html += `${p.marker} ${p.seriesName}: ${w[0].toFixed(1)} m/s · ${w[1].toFixed(0)}°<br>`;
                         } else {
                             html += `${p.marker} ${p.seriesName}: ${p.value[1]}<br>`;
                         }
@@ -622,11 +630,11 @@ async function loadMeteoPron(lat, lng) {
                     return html;
                 }
             },
-            legend: { data: ['Temp (°C)', 'HR (%)', 'Lluvia (mm/h)', 'Solar (W/m²)', 'Viento'], top: 2, textStyle: { fontSize: 10 } },
-            // Dos grids: arriba el principal, abajo las flechas de viento
+            axisPointer: { link: [{ xAxisIndex: 'all' }] },   // sincroniza cursor X entre los 2 grids
+            legend: { data: ['Temp (°C)', 'HR (%)', 'Lluvia (mm/h)', 'Solar (W/m²)', 'Viento (10 m)'], top: 2, textStyle: { fontSize: 10 } },
             grid: [
-                { left: 50, right: 60, top: 26, height: '70%' },     // principal
-                { left: 50, right: 60, bottom: 16, height: '10%' }   // viento (debajo)
+                { left: 50, right: 60, top: 26, height: '70%' },
+                { left: 50, right: 60, bottom: 16, height: '10%' }
             ],
             xAxis: [
                 { type: 'time', gridIndex: 0, axisLabel: { show: false } },
@@ -635,33 +643,29 @@ async function loadMeteoPron(lat, lng) {
             yAxis: [
                 { type: 'value', name: '°C / mm·h⁻¹', position: 'left', gridIndex: 0, nameTextStyle: { fontSize: 9 } },
                 { type: 'value', name: '%  /  W·m⁻²', position: 'right', gridIndex: 0, nameTextStyle: { fontSize: 9 } },
-                { type: 'category', gridIndex: 1, data: ['Viento'], axisLabel: { fontSize: 9 }, splitLine: { show: false } }
+                // Eje numerico fijo 0..1 con flechas centradas en 0.5; evita el problema del category-axis con un solo valor
+                { type: 'value', gridIndex: 1, min: 0, max: 1, show: false }
             ],
             series: [
                 { name: 'Temp (°C)',     type: 'line', smooth: true, yAxisIndex: 0, xAxisIndex: 0, data: d.t,     itemStyle: { color: '#e74c3c' }, lineStyle: { width: 2 } },
                 { name: 'HR (%)',        type: 'line', smooth: true, yAxisIndex: 1, xAxisIndex: 0, data: d.rh,    itemStyle: { color: '#3498db' }, lineStyle: { width: 1.5 } },
                 { name: 'Lluvia (mm/h)', type: 'bar',  yAxisIndex: 0, xAxisIndex: 0, data: d.precip,             itemStyle: { color: '#5dade2' } },
                 { name: 'Solar (W/m²)',  type: 'line', yAxisIndex: 1, xAxisIndex: 0, data: d.solar, itemStyle: { color: '#f39c12' }, lineStyle: { width: 1 }, areaStyle: { color: '#f39c1230' } },
-                // Flechas de viento: scatter con symbol arrow rotado segun direccion. Tamano proporcional a velocidad.
                 {
-                    name: 'Viento',
+                    name: 'Viento (10 m)',
                     type: 'scatter',
                     xAxisIndex: 1, yAxisIndex: 2,
                     data: d.wind.map(([t, spd, dir]) => ({
-                        value: [t, 'Viento'],
+                        value: [t, 0.5],
                         symbolRotate: dir,
                         symbolSize: Math.max(10, Math.min(28, 10 + spd * 2.5)),
                         itemStyle: { color: '#16a085' }
                     })),
-                    symbol: 'path://M 50 0 L 90 80 L 50 60 L 10 80 Z',  // flecha apuntando "abajo" (sentido del viento, norte→sur con dir=0)
+                    symbol: 'path://M 50 0 L 90 80 L 50 60 L 10 80 Z',
                     symbolSize: 18,
                     label: {
-                        show: true,
-                        position: 'inside',
-                        formatter: (p) => {
-                            const w = d.wind.find(x => x[0] === p.value[0]);
-                            return w ? w[1].toFixed(0) : '';
-                        },
+                        show: true, position: 'inside',
+                        formatter: (p) => { const w = windByTs[p.value[0]]; return w ? w[0].toFixed(0) : ''; },
                         fontSize: 8, color: 'white', fontWeight: 'bold'
                     }
                 }
