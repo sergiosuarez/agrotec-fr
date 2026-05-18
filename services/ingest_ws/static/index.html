@@ -103,7 +103,7 @@
         #bottom-panel {
             position: absolute; bottom: 0; left: 0; right: 0;
             background: white; border-top: 1px solid var(--border);
-            max-height: 50vh; min-height: 280px;
+            height: 340px;
             transition: transform .25s ease;
             transform: translateY(100%);
             z-index: 4;
@@ -118,10 +118,16 @@
         #bottom-panel-header .title { flex: 1; font-weight: 600; }
         #bottom-panel-header button { background: none; border: 1px solid #ffffff60; color: white; padding: 3px 8px; font-size: .75rem; border-radius: 3px; cursor: pointer; }
         #bottom-panel-header button:hover { background: #ffffff20; }
-        #bottom-tabs { display: flex; background: #f8f8f8; border-bottom: 1px solid var(--border); }
-        #bottom-tabs .tab { padding: 6px 14px; font-size: .8rem; }
-        #bottom-content { flex: 1; padding: 8px 12px; overflow: hidden; }
-        #chart-pron, #chart-prof { width: 100%; height: 100%; min-height: 220px; }
+        #bottom-content {
+            flex: 1; display: grid;
+            grid-template-columns: 75% 25%;
+            overflow: hidden;
+        }
+        #chart-pron-wrap { border-right: 1px solid var(--border); padding: 4px; overflow: hidden; display: flex; flex-direction: column; }
+        #chart-pron { flex: 1; min-height: 0; }
+        #chart-prof-wrap { padding: 4px; overflow: hidden; display: flex; flex-direction: column; }
+        #chart-prof-title { font-size: .7rem; color: var(--muted); text-align: center; padding: 2px; }
+        #chart-prof { flex: 1; min-height: 0; }
         .panel-loading { padding: 40px; text-align: center; color: var(--muted); }
     </style>
 </head>
@@ -190,13 +196,14 @@
                 <span class="title">🌦 Pronóstico GFS — <span id="meteo-coords">…</span></span>
                 <button id="btn-close-meteo">✕ Cerrar</button>
             </div>
-            <div id="bottom-tabs">
-                <div class="tab active" data-mtab="pron">Pronóstico (40 pasos / 5 días)</div>
-                <div class="tab" data-mtab="prof">Perfil vertical (6 niveles)</div>
-            </div>
             <div id="bottom-content">
-                <div id="chart-pron" style="display:block"></div>
-                <div id="chart-prof" style="display:none"></div>
+                <div id="chart-pron-wrap">
+                    <div id="chart-pron"></div>
+                </div>
+                <div id="chart-prof-wrap">
+                    <div id="chart-prof-title">Perfil vertical (+24h)</div>
+                    <div id="chart-prof"></div>
+                </div>
             </div>
         </div>
     </main>
@@ -564,14 +571,10 @@ let chartPron = null, chartProf = null;
 function openMeteoPanel(lat, lng) {
     document.getElementById('bottom-panel').classList.add('open');
     document.getElementById('meteo-coords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    // Resize map after panel opens
-    setTimeout(() => map.resize(), 280);
+    setTimeout(() => { map.resize(); chartPron?.resize(); chartProf?.resize(); }, 280);
 
     loadMeteoPron(lat, lng);
-    // El perfil se carga al cambiar tab (lazy)
-    document.getElementById('chart-prof').dataset.lat = lat;
-    document.getElementById('chart-prof').dataset.lng = lng;
-    document.getElementById('chart-prof').dataset.loaded = '';
+    loadMeteoProf(lat, lng);
 }
 
 function closeMeteoPanel() {
@@ -593,21 +596,75 @@ async function loadMeteoPron(lat, lng) {
         el.innerHTML = '';
         if (chartPron) chartPron.dispose();
         chartPron = echarts.init(el);
+
+        // Datos para flechas viento: cada flecha es [t, y_constante, dir_rotation, speed]
+        const windArrows = d.wind.map(([t, spd, dir]) => ({
+            value: [t, 0],      // todas en y=0 del grid 1
+            speed: spd,
+            dir: dir,
+            symbolRotate: dir   // ECharts rota desde el norte hacia el sentido del viento
+        }));
+
         chartPron.setOption({
-            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-            legend: { data: ['Temp (°C)', 'HR (%)', 'Lluvia (mm/h)', 'Viento (m/s)', 'Solar (W/m²)'], top: 4, textStyle: { fontSize: 11 } },
-            grid: { left: 50, right: 60, top: 36, bottom: 30 },
-            xAxis: { type: 'time' },
+            tooltip: {
+                trigger: 'axis', axisPointer: { type: 'cross' },
+                formatter: (params) => {
+                    const t = new Date(params[0].value[0]).toLocaleString();
+                    let html = `<b>${t}</b><br>`;
+                    params.forEach(p => {
+                        if (p.seriesName === 'Viento') {
+                            const w = d.wind.find(w => w[0] === p.value[0]);
+                            if (w) html += `${p.marker} ${p.seriesName}: ${w[1].toFixed(1)} m/s · ${w[2].toFixed(0)}°<br>`;
+                        } else {
+                            html += `${p.marker} ${p.seriesName}: ${p.value[1]}<br>`;
+                        }
+                    });
+                    return html;
+                }
+            },
+            legend: { data: ['Temp (°C)', 'HR (%)', 'Lluvia (mm/h)', 'Solar (W/m²)', 'Viento'], top: 2, textStyle: { fontSize: 10 } },
+            // Dos grids: arriba el principal, abajo las flechas de viento
+            grid: [
+                { left: 50, right: 60, top: 26, height: '70%' },     // principal
+                { left: 50, right: 60, bottom: 16, height: '10%' }   // viento (debajo)
+            ],
+            xAxis: [
+                { type: 'time', gridIndex: 0, axisLabel: { show: false } },
+                { type: 'time', gridIndex: 1, axisLabel: { fontSize: 9 } }
+            ],
             yAxis: [
-                { type: 'value', name: '°C / m/s / mm·h⁻¹', position: 'left', nameTextStyle: { fontSize: 10 } },
-                { type: 'value', name: '%  /  W·m⁻²', position: 'right', nameTextStyle: { fontSize: 10 } }
+                { type: 'value', name: '°C / mm·h⁻¹', position: 'left', gridIndex: 0, nameTextStyle: { fontSize: 9 } },
+                { type: 'value', name: '%  /  W·m⁻²', position: 'right', gridIndex: 0, nameTextStyle: { fontSize: 9 } },
+                { type: 'category', gridIndex: 1, data: ['Viento'], axisLabel: { fontSize: 9 }, splitLine: { show: false } }
             ],
             series: [
-                { name: 'Temp (°C)',     type: 'line', smooth: true, yAxisIndex: 0, data: d.t,     itemStyle: { color: '#e74c3c' }, lineStyle: { width: 2 } },
-                { name: 'HR (%)',        type: 'line', smooth: true, yAxisIndex: 1, data: d.rh,    itemStyle: { color: '#3498db' }, lineStyle: { width: 1.5 } },
-                { name: 'Lluvia (mm/h)', type: 'bar',  yAxisIndex: 0, data: d.precip,             itemStyle: { color: '#5dade2' } },
-                { name: 'Viento (m/s)',  type: 'line', yAxisIndex: 0, data: d.wind.map(([t, s]) => [t, s]), itemStyle: { color: '#16a085' }, lineStyle: { width: 1 } },
-                { name: 'Solar (W/m²)',  type: 'line', yAxisIndex: 1, data: d.solar, itemStyle: { color: '#f39c12' }, lineStyle: { width: 1 }, areaStyle: { color: '#f39c1240' } }
+                { name: 'Temp (°C)',     type: 'line', smooth: true, yAxisIndex: 0, xAxisIndex: 0, data: d.t,     itemStyle: { color: '#e74c3c' }, lineStyle: { width: 2 } },
+                { name: 'HR (%)',        type: 'line', smooth: true, yAxisIndex: 1, xAxisIndex: 0, data: d.rh,    itemStyle: { color: '#3498db' }, lineStyle: { width: 1.5 } },
+                { name: 'Lluvia (mm/h)', type: 'bar',  yAxisIndex: 0, xAxisIndex: 0, data: d.precip,             itemStyle: { color: '#5dade2' } },
+                { name: 'Solar (W/m²)',  type: 'line', yAxisIndex: 1, xAxisIndex: 0, data: d.solar, itemStyle: { color: '#f39c12' }, lineStyle: { width: 1 }, areaStyle: { color: '#f39c1230' } },
+                // Flechas de viento: scatter con symbol arrow rotado segun direccion. Tamano proporcional a velocidad.
+                {
+                    name: 'Viento',
+                    type: 'scatter',
+                    xAxisIndex: 1, yAxisIndex: 2,
+                    data: d.wind.map(([t, spd, dir]) => ({
+                        value: [t, 'Viento'],
+                        symbolRotate: dir,
+                        symbolSize: Math.max(10, Math.min(28, 10 + spd * 2.5)),
+                        itemStyle: { color: '#16a085' }
+                    })),
+                    symbol: 'path://M 50 0 L 90 80 L 50 60 L 10 80 Z',  // flecha apuntando "abajo" (sentido del viento, norte→sur con dir=0)
+                    symbolSize: 18,
+                    label: {
+                        show: true,
+                        position: 'inside',
+                        formatter: (p) => {
+                            const w = d.wind.find(x => x[0] === p.value[0]);
+                            return w ? w[1].toFixed(0) : '';
+                        },
+                        fontSize: 8, color: 'white', fontWeight: 'bold'
+                    }
+                }
             ]
         });
     } catch (err) {
@@ -654,21 +711,6 @@ async function loadMeteoProf(lat, lng) {
         el.innerHTML = `<div class="panel-loading" style="color:#c00;">Error: ${err.message}</div>`;
     }
 }
-
-// Tabs del panel inferior
-document.querySelectorAll('#bottom-tabs .tab').forEach(t => t.addEventListener('click', () => {
-    document.querySelectorAll('#bottom-tabs .tab').forEach(x => x.classList.toggle('active', x === t));
-    const show = t.dataset.mtab;
-    document.getElementById('chart-pron').style.display = show === 'pron' ? 'block' : 'none';
-    document.getElementById('chart-prof').style.display = show === 'prof' ? 'block' : 'none';
-    // Lazy load perfil
-    const profEl = document.getElementById('chart-prof');
-    if (show === 'prof' && profEl.dataset.lat && !profEl.dataset.loaded) {
-        loadMeteoProf(parseFloat(profEl.dataset.lat), parseFloat(profEl.dataset.lng));
-        profEl.dataset.loaded = '1';
-    }
-    setTimeout(() => { chartPron?.resize(); chartProf?.resize(); }, 30);
-}));
 
 // Botones panel meteo
 document.getElementById('btn-close-meteo').addEventListener('click', closeMeteoPanel);
