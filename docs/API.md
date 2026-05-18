@@ -1,10 +1,26 @@
-# API REST — Agrotec visor
+# API REST — IDEPalma visor
 
-Base URL pública: `https://agrotec.dominio.com/api/v1`
-Documentación interactiva (Swagger): `https://agrotec.dominio.com/docs`
-OpenAPI JSON: `https://agrotec.dominio.com/openapi.json`
+Base URL pública: `https://agrotec.desarrollowebsite.com/api/v1`
+Documentación interactiva (Swagger): `https://agrotec.desarrollowebsite.com/docs`
+OpenAPI JSON: `https://agrotec.desarrollowebsite.com/openapi.json`
 
 > Todas las respuestas son JSON. Los errores siguen el formato estándar de FastAPI: `{"detail": "mensaje"}` con HTTP 4xx/5xx.
+
+## Mapa rápido de endpoints
+
+| Endpoint | Uso |
+|---|---|
+| `GET /health` | healthcheck |
+| `GET /api/v1/layers` | **catálogo unificado** para el visor (raster + vector + featured + visible) |
+| `GET /api/v1/layers?include_hidden=true` | misma lista pero incluye las marcadas como ocultas (admin) |
+| `PUT /api/v1/visor/config` | admin: marcar visible/destacada/orden/opacidad/color de una capa |
+| `DELETE /api/v1/visor/config/{alternate}` | borrar config local de una capa (vuelve a defaults) |
+| `GET /api/v1/feature-info` | popup vectorial: proxy de WMS GetFeatureInfo |
+| `GET /api/v1/gfs/point` | pronóstico GFS para un punto (T/HR/lluvia/solar/viento 10 m) |
+| `GET /api/v1/gfs/profile` | perfil vertical GFS (T/HR en 6 niveles de presión, snapshot +24 h) |
+| `GET /api/v1/gfs/status` | NetCDFs disponibles en el volumen GFS |
+| `GET /api/v1/ortomosaicos[?sync=true]` | (legacy) solo ortomosaicos — usar `/layers` en su lugar |
+| `GET /api/v1/cultivos`, `/haciendas`, `/parcelas` | CRUDs internos de negocio |
 
 ---
 
@@ -112,9 +128,151 @@ Detalle de una parcela. `404` si no existe.
 
 ---
 
-## Ortomosaicos
+## Capas (catálogo unificado del visor) — v2
+
+### `GET /api/v1/layers[?include_hidden=false]`
+
+Endpoint principal que consume el geovisor. Devuelve **todas** las capas publicadas en GeoNode (raster + vector) categorizadas, con merge de la config local (`visor_layer_config`).
+
+**Query params:**
+- `include_hidden` (bool, default `false`) — si `true`, incluye también las capas marcadas con `visible=false`. Usado por el modal admin.
+
+**Respuesta:** `[LayerOut]`
+
+```json
+[
+  {
+    "alternate": "geonode:vuelo1_placa27",
+    "title": "vuelo1_placa27",
+    "abstract": null,
+    "subtype": "raster",
+    "category": "ortomosaicos",
+    "wms_url": "…/wms?…&layers=geonode:vuelo1_placa27&…&bbox={bbox-epsg-3857}…",
+    "legend_url": "…/wms?…&request=GetLegendGraphic&layer=geonode:vuelo1_placa27",
+    "thumbnail_url": "…",
+    "bbox": [-79.92, -2.72, -79.78, -2.65],
+    "visible": true,
+    "featured": false,
+    "order": 999,
+    "default_opacity": 1.0,
+    "color": null
+  }
+]
+```
+
+**Categorización** (heurística por nombre):
+- `ortomosaicos` — rasters con `ortho|ortomos|ap_temp|drone|rgb` en el nombre
+- `haciendas` — vectores con `parcela|lote|haciend`
+- `infraestructura` — `via|carret|camin`
+- `limites` — `limite|provinc|canton|parroq`
+- `vectoriales` — resto de vectores
+- `raster_otros` — resto de rasters
+
+**Ordenamiento:** destacadas primero, luego por `order` asc, luego por `title` alfabético.
+
+El `bbox` se extrae preferentemente de `ll_bbox_polygon` (siempre WGS84). Si la capa solo tiene `bbox_polygon` en CRS nativo (UTM, etc.), se descarta para evitar errores `LngLat` en MapLibre.
+
+---
+
+### `PUT /api/v1/visor/config`
+
+Crea o actualiza la configuración local de una capa. Solo se actualizan los campos enviados (parcial = ok).
+
+**Body:**
+```json
+{
+  "alternate": "geonode:full_prov2",
+  "visible": false,
+  "featured": false,
+  "order": 5,
+  "default_opacity": 0.6,
+  "color": "#1B7A40"
+}
+```
+
+**Respuesta `200`:** misma struct con todos los campos persistidos.
+
+Idempotente. Si `alternate` no existe, lo crea.
+
+---
+
+### `DELETE /api/v1/visor/config/{alternate}`
+
+Elimina la config local de una capa (vuelve a defaults: visible=true, featured=false, order=999). `404` si no existía.
+
+> El path acepta `:` y `/` sin escapar gracias al converter `:path`.
+
+---
+
+## Feature info (popups vectoriales)
+
+### `GET /api/v1/feature-info?layer=…&lat=…&lng=…[&tolerance=0.0005]`
+
+Proxy server-side al `GetFeatureInfo` de GeoServer (evita problemas de CORS/ORB del navegador). Arma un bbox WGS84 alrededor del punto clickeado.
+
+**Query params:**
+- `layer` (str, **req**) — alternate de la capa, ej: `geonode:lotes_amelia`
+- `lat`, `lng` (float, **req**) — coordenadas WGS84 del click
+- `tolerance` (float, default `0.0005`) — grados alrededor del punto (~50 m a trópicos)
+
+**Respuesta:** `GeoJSON FeatureCollection`. Si no hay features bajo el punto, `{"type":"FeatureCollection","features":[],"totalFeatures":0}`.
+
+`502` si GeoServer falla.
+
+---
+
+## GFS — Pronóstico para un punto
+
+### `GET /api/v1/gfs/point?lat=…&lng=…`
+
+Series temporales completas (todos los forecast hours del último ciclo, típicamente +0 a +120 h cada 3 h ≈ 40 puntos) para variables de superficie.
+
+**Respuesta:**
+```json
+{
+  "lat": -2.7,
+  "lng": -79.7,
+  "times":  [1716120000000, 1716130800000, …],
+  "t":      [[ts, 24.31], [ts, 23.85], …],
+  "rh":     [[ts, 87.0], …],
+  "precip": [[ts, 0.02], …],
+  "solar":  [[ts, 312.0], …],
+  "wind":   [[ts, 1.9, 300], [ts, 3.0, 303], …]
+}
+```
+
+- `t` en °C (convertido de K)
+- `rh` en %
+- `precip` en mm/h (convertido de kg/m²/s)
+- `solar` en W/m²
+- `wind`: `[timestamp_ms, m/s, °]` — velocidad y dirección calculadas desde `u10 + v10` (referencia desde el norte hacia el sentido del viento)
+
+`503` si el NetCDF aún no fue descargado por el scheduler.
+
+---
+
+### `GET /api/v1/gfs/profile?lat=…&lng=…`
+
+Perfil vertical para un punto. Snapshot a +24 h (próximo paso pendiente: extender a todos los forecast hours y agregar `UGRD/VGRD` en cada nivel).
+
+**Respuesta:**
+```json
+{
+  "lat": -2.7,
+  "lng": -79.7,
+  "levels_hpa": [1000, 925, 850, 700, 500, 300],
+  "t_celsius":  [25.4, 22.1, 18.9, 11.2, -3.7, -34.5],
+  "rh_pct":     [88.0, 82.0, 70.5, 45.3, 30.1, 12.0]
+}
+```
+
+---
+
+## Ortomosaicos (legacy)
 
 ### `GET /api/v1/ortomosaicos[?sync=true]`
+
+> **Deprecado** en favor de `/api/v1/layers` (que devuelve raster + vector unificado). Se mantiene por compatibilidad con scripts existentes.
 
 Lista los ortomosaicos. **Modo `sync=true` consulta GeoNode al vuelo** y arma la respuesta desde su API (útil mientras la tabla local `ortomosaico` no está poblada).
 

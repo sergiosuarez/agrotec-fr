@@ -1,92 +1,128 @@
-# Guía del geovisor — Usuario final
+# Guía del geovisor IDEPalma — Usuario final
 
-Cómo usar el visor web `https://agrotec.dominio.com/visor/`.
+Cómo usar el visor web `https://agrotec.desarrollowebsite.com/visor/`.
 
-## Pantalla principal
+> Versión v2: capas categorizadas, popups vectoriales, panel meteorológico GFS interactivo, admin de visibilidad/orden, URL compartible.
 
-El visor tiene 2 zonas:
+---
 
-- **Izquierda (panel lateral)**: controles de capas, mapas base, meteorología y estado del sistema
-- **Derecha (mapa)**: visualización geográfica con MapLibre GL
+## Layout
 
 ```
-┌─────────────────────────────────┬──────────────────────────────────┐
-│  🌱 Agrotec                     │                                  │
-│  Geovisor agricola              │                                  │
-│  ─────────────                  │                                  │
-│  MAPA BASE                      │              MAPA                │
-│  ⦿ OpenStreetMap                │            (interactivo)         │
-│  ⦾ Satélite (Esri)              │                                  │
-│  ─────────────                  │     Pan: arrastrar               │
-│  ORTOMOSAICOS DRONE             │     Zoom: scroll o + / -         │
-│  ☐ ap_temp_1_1   [⊕]            │     Rotar: ctrl+arrastrar        │
-│  ☐ ap_temp_1_2   [⊕]            │                                  │
-│  ☐ ap_temp_2_1   [⊕]            │                                  │
-│  ☐ ap_temp_2_2   [⊕]            │                                  │
-│                                 │                                  │
-│  METEOROLOGIA (GFS)             │                                  │
-│  [disponible]                   │                                  │
-│  actualizado: hace 6h           │                                  │
-│  gfspgrb20p25.nc (263 KB)       │                                  │
-│                                 │                                  │
-│  ESTADO SERVICIOS               │                                  │
-│  db: [ok]                       │                                  │
-│  geonode: [ok]                  │                                  │
-│  thredds: [ok]                  │  ─────────────────────────────── │
-│                                 │  -3.16752, -79.86541 — zoom 17.0 │
-│  API docs · GeoNode admin       │                                  │
-└─────────────────────────────────┴──────────────────────────────────┘
+┌─────────────────────┬─────────────────────────────────────────┐
+│ 🌱 IDEPalma         │ [⊕ Fit] [↻ Reset] [🌦 GFS]              │
+│ Geovisor PALMAR     │                                         │
+│ ─────────────       │                                         │
+│ [🔍 Buscar…]        │                                         │
+│ [Capas|Base|Estado] │                MAPA (MapLibre)          │
+│                     │                                         │
+│ ▼ 🛩 Ortomosaicos(7)│   Click vector  → popup con atributos   │
+│   ☑ vuelo1_placa27  │   Shift+click   → panel meteo GFS       │
+│   ☐ vuelo2_placa27  │                                         │
+│                     │                                         │
+│ ▼ 🌾 Haciendas (1)  │                                         │
+│   ☑ haciendas_palmar│                                         │
+│                     │                                         │
+│ ▶ 🗺 Límites (3)    │ ◄── (categoría colapsada)               │
+│                     │                                         │
+│ [🔗 Compartir] [⚙]  │ -2.7° -79.7° — zoom 14.2                │
+└─────────────────────┴─────────────────────────────────────────┘
 ```
 
-## Operaciones básicas
+El botón `‹` flotante en el borde del sidebar lo colapsa por completo. Click en `›` lo vuelve a desplegar.
 
-### 1. Cambiar el mapa base
+---
 
-Click en **OpenStreetMap** o **Satélite (Esri)**. El cambio es inmediato y conserva las capas activas.
+## Capas
 
-### 2. Activar/desactivar un ortomosaico
+### Activar/desactivar
+Click en el checkbox a la izquierda del nombre de la capa. Las **destacadas** (marca verde a la izquierda) salen activadas automáticamente al cargar el visor.
 
-Click en el checkbox `☐ ap_temp_1_1` → se carga la capa raster encima del mapa base.
+### Cambiar opacidad y z-order
+Al activarse, debajo aparece un slider de opacidad. Para capas activas también aparecen flechas **▲ / ▼** que suben/bajan el orden de superposición (útil cuando un polígono grande tapa otra capa).
 
-Al activar:
-- Se muestra el slider **opacidad** debajo (0-100%)
-- El botón **⊕** lleva al área de la capa
+### Centrar el mapa en una capa
+Botón **⊕** al lado de cada capa → el mapa hace zoom al bbox de la capa.
 
-### 3. Ajustar opacidad
+### Categorías colapsables
+Click en el header de cualquier categoría (`🛩 Ortomosaicos drone`, `🌾 Haciendas y lotes`, etc.) para colapsar/expandir. Útil cuando hay muchas capas.
 
-Mover el slider para ver el ortomosaico semi-transparente sobre el mapa base. Útil para comparar el ortomosaico con la imagen satelital de fondo.
+### Buscar
+Caja de búsqueda en el tope del sidebar — filtra por nombre o alternate.
 
-### 4. Centrar el mapa en una capa
+---
 
-Click en **⊕** al lado de la capa → el mapa hace zoom al bbox de las capas AP_TEMP (sur de Ecuador, ~3.17°S 79.86°W).
+## Popups (capas vectoriales)
 
-### 5. Ver coordenadas y zoom actual
+Click sobre un polígono/línea/punto vectorial → aparece un popup con todos los atributos de ese feature. Los rasters no responden a click (no tienen atributos por feature).
 
-Esquina inferior izquierda del mapa muestra `lat, lon — zoom` en tiempo real al mover el cursor.
+El popup usa `GET /api/v1/feature-info?layer=…&lat=…&lng=…` con una tolerancia de ~50 m alrededor del clic.
 
-### 6. Navegar el mapa
+---
 
-- **Pan**: clic y arrastra
-- **Zoom in/out**: scroll del mouse, o `+` / `-` del teclado, o doble-clic
-- **Rotar**: Ctrl + arrastrar
-- **Tilt (3D)**: Ctrl + arrastrar con click derecho
+## Mapa base
 
-## Información meteorológica (GFS)
+Tab **Mapa base** → tres opciones:
+- **OpenStreetMap** (default)
+- **Satélite (Esri World Imagery)** — imagen aérea de alta resolución
+- **Mapa claro (Carto)** — sobrio, ideal para impresión
 
-El panel **METEOROLOGIA (GFS)** muestra:
+Cambiar el base no afecta las capas activas.
 
-- **Badge `disponible`** (verde) o **`no disponible`** (rojo)
-- **Última actualización** del NetCDF (cada 6h aprox)
-- **Lista de archivos** descargables — clic abre el `.nc` para descarga
+---
 
-Para visualizar la temperatura GFS como capa WMS sobre el mapa (avanzado):
-1. Copia la URL del archivo (ej. `https://agrotec.dominio.com/thredds/wms/.../gfspgrb20p25.nc`)
-2. Reemplaza `fileServer` por `wms` en la URL
-3. Úsala desde QGIS o cualquier cliente WMS con `LAYERS=t2m`
+## Panel meteorológico GFS
+
+Dos formas de abrirlo:
+- Botón **🌦 GFS** en la toolbar → centro actual del mapa
+- **Shift + click** en cualquier punto del mapa → ese punto
+
+El panel se desliza desde abajo y ocupa el 75% / 25% del ancho:
+
+### 75% — Pronóstico horario (5 días)
+
+Gráfico con cinco series:
+- **Temperatura** (°C, línea roja)
+- **Humedad relativa** (%, línea azul)
+- **Lluvia** (mm/h, barras celestes)
+- **Solar** (W/m², área amarilla)
+- **Viento a 10 m** (flechas verdes en la barra inferior — la rotación indica dirección, el tamaño indica velocidad)
+
+Hover sobre cualquier instante → tooltip unificado con los 5 valores y la hora exacta. Click en la leyenda para apagar/prender series.
+
+### 25% — Perfil vertical (snapshot +24 h)
+
+Temperatura y humedad relativa en 6 niveles de presión (1000, 925, 850, 700, 500, 300 hPa). Snapshot a +24 h del último ciclo GFS. El eje Y son las hPa, eje X-bottom es Temp (rojo), eje X-top es HR (azul).
+
+> **Nota:** el viento en altura aún **no** está disponible (solo el de 10 m). Requiere extender el descargador GFS para traer `UGRD/VGRD` en niveles isobáricos.
+
+---
+
+## Compartir vista
+
+Botón **🔗 Compartir vista** → copia al portapapeles la URL con el estado actual codificado en query string (`?l=alt1,alt2&z=15&lat=…&lng=…`). Cualquier persona que abra esa URL verá exactamente el mismo mapa.
+
+---
+
+## Admin del visor (botón ⚙)
+
+Solo para administradores del sistema. Modal con tabla de **todas** las capas (incluso las marcadas como ocultas):
+
+| Columna | Qué hace |
+|---|---|
+| **Visible** | Si está apagado, la capa **no aparece** en el sidebar (queda oculta para los usuarios). Útil para retirar provisionalmente capas en pruebas o duplicadas. |
+| **Destacada** | Si está prendida, la capa se **auto-activa** al cargar el visor (sale prendida por defecto). No afecta si aparece o no en la lista. |
+| **Orden** | Número usado para ordenar el listado del sidebar (menor → más arriba). |
+
+Cambios se guardan automáticamente al cambiar cada campo. Al cerrar el modal el sidebar se refresca.
+
+Las filas de capas marcadas como `visible=false` aparecen atenuadas para diferenciarlas.
+
+---
 
 ## Estado de servicios
 
-El panel **ESTADO SERVICIOS** monitorea en vivo:
+Tab **Estado** → estado en vivo de los componentes:
 
 | Servicio | Verde si... |
 |---|---|
@@ -94,37 +130,46 @@ El panel **ESTADO SERVICIOS** monitorea en vivo:
 | `geonode` | GeoNode upstream está vivo |
 | `thredds` | THREDDS upstream está vivo |
 
-Si alguno aparece **rojo**, contactar al administrador (`admin@dominio.com`).
+También lista los NetCDF disponibles en el volumen GFS con su tamaño y fecha de última actualización.
 
-## Atajos de teclado
+---
 
-- `+` / `-` — zoom in/out
-- `←` `→` `↑` `↓` — pan
-- `Shift + arrastrar` — selección rectangular (zoom box)
+## Navegación del mapa
 
-## Limitaciones actuales (MVP)
+- **Pan**: clic y arrastra
+- **Zoom**: scroll del mouse, o `+` / `-` del teclado, o doble-clic
+- **Rotar**: Ctrl + arrastrar
+- **Tilt (3D)**: Ctrl + click derecho + arrastrar
+- **Coordenadas en vivo**: esquina inferior izquierda (sube automáticamente al abrir el panel meteo para no taparse)
 
-- **No hay autenticación** — el visor es público (configurable a nivel reverse proxy)
-- **No hay edición** — solo visualización (la edición se hace desde GeoNode admin)
-- **No hay búsqueda** de capas por nombre/atributo (próxima versión)
-- **No hay panel de leyenda** — agregar manualmente desde GeoServer (`/geoserver/web/`)
-- **No hay timeline** para variables GFS (próxima versión)
+---
 
 ## Para administradores
 
-Para agregar/quitar capas que aparecen en el visor, usar **GeoNode admin** (`https://agrotec.dominio.com/`):
+Para **agregar** nuevas capas al sistema, usar GeoNode admin (`https://agrotec.desarrollowebsite.com/`):
 
-- Subir capa → automáticamente aparece en `/api/v1/ortomosaicos?sync=true` y el visor la lista
-- Borrar capa → desaparece del visor en el siguiente reload
-- Cambiar permisos → el visor consume capas públicas; las privadas no aparecen sin OAuth (no implementado aún)
+1. Subir el archivo (TIFF para raster, SHP/GPKG para vector) desde `Datasets → Cargar nuevo dataset`
+2. Asignar título y publicar
+3. La capa aparece automáticamente en el sidebar del visor en el próximo reload
 
-Detalle en [GEONODE_ADMIN.md](../../bk/docs/GEONODE_ADMIN.md).
+Si la capa no debe ser visible aún para los usuarios, abrir el visor → ⚙ Admin → desmarcar **Visible** en esa fila.
 
-## Reportar problemas
+Para los ortomosaicos drone grandes (>500 MB), ver `bk/docs/INSTRUCTIVO_SUBIR_CAPAS.md` — explica cómo convertir a COG-JPEG primero para reducir 10× el tamaño manteniendo calidad visual.
 
-Si el visor no carga las capas:
+---
 
-1. Refrescar página (`F5` o `Ctrl+Shift+R`)
-2. Ver consola del navegador (`F12`) por errores
-3. Revisar `https://agrotec.dominio.com/health` — debe responder `200`
-4. Reportar al admin con captura de la consola
+## Solución de problemas
+
+**El visor no carga**
+1. Refrescar con `Ctrl + Shift + R` (bypassea cache)
+2. Abrir consola del navegador (`F12 → Console`) y reportar errores al admin
+3. Verificar `https://agrotec.desarrollowebsite.com/health` → debe responder JSON con `status: ok`
+
+**Una capa nueva no aparece en el sidebar**
+1. Verificar en GeoNode admin que esté publicada (no en draft)
+2. Abrir ⚙ Admin del visor → confirmar que **Visible** está marcado
+3. Forzar refresh del listado con `Ctrl + F5`
+
+**El popup vectorial sale vacío**
+1. Click cayó fuera del polígono (margen de tolerancia ~50 m a esa latitud)
+2. La capa fue publicada como WMS pero no como WFS — pedir al admin que verifique en GeoServer
