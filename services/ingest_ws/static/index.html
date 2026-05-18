@@ -611,22 +611,29 @@ async function loadMeteoPron(lat, lng) {
         chartPron.setOption({
             tooltip: {
                 trigger: 'axis',
-                axisPointer: { type: 'cross', axis: 'x' },   // solo X: evita matchear toda la categoria Y
+                axisPointer: { type: 'cross', axis: 'x' },
                 formatter: (params) => {
                     if (!params.length) return '';
-                    const t = new Date(params[0].value[0]).toLocaleString();
+                    const ts = params[0].value[0];
+                    const t = new Date(ts).toLocaleString();
                     let html = `<b>${t}</b><br>`;
                     const seen = new Set();
+                    // Series del grid principal (T, HR, lluvia, solar) — ya filtradas por legend
                     params.forEach(p => {
-                        if (seen.has(p.seriesName)) return;   // dedupe por serie
+                        if (p.seriesName === 'Viento (10 m)') return;   // se agrega al final
+                        if (seen.has(p.seriesName)) return;
                         seen.add(p.seriesName);
-                        if (p.seriesName === 'Viento (10 m)') {
-                            const w = windByTs[p.value[0]];
-                            if (w) html += `${p.marker} ${p.seriesName}: ${w[0].toFixed(1)} m/s · ${w[1].toFixed(0)}°<br>`;
-                        } else {
-                            html += `${p.marker} ${p.seriesName}: ${p.value[1]}<br>`;
-                        }
+                        html += `${p.marker} ${p.seriesName}: ${p.value[1]}<br>`;
                     });
+                    // Viento: lookup manual por timestamp; respeta visibilidad de la leyenda
+                    const legendSel = chartPron.getOption().legend?.[0]?.selected || {};
+                    if (legendSel['Viento (10 m)'] !== false) {
+                        const w = windByTs[ts];
+                        if (w) {
+                            html += `<span style="display:inline-block;width:10px;height:10px;background:#16a085;margin-right:4px;border-radius:50%;vertical-align:middle;"></span>`
+                                  + `Viento (10 m): ${w[0].toFixed(1)} m/s · ${w[1].toFixed(0)}°<br>`;
+                        }
+                    }
                     return html;
                 }
             },
