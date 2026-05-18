@@ -103,3 +103,18 @@ class Ortomosaico(Base):
     srid_origen: Mapped[int | None] = mapped_column(Integer)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class VisorLayerConfig(Base):
+    """Configuracion por capa para el geovisor (orden, destacada, color override)."""
+
+    __tablename__ = "visor_layer_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    alternate: Mapped[str] = mapped_column(String, unique=True, index=True)
+    featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    order: Mapped[int] = mapped_column(Integer, default=999)
+    default_opacity: Mapped[Decimal] = mapped_column(Numeric(3, 2), default=1.0)
+    color: Mapped[str | None] = mapped_column(String, default=None)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -7,7 +7,17 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .routers import cultivos, gfs, haciendas, health, ortomosaicos, parcelas
+from .routers import (
+    cultivos,
+    feature_info,
+    gfs,
+    haciendas,
+    health,
+    layers,
+    ortomosaicos,
+    parcelas,
+    visor_config,
+)
 
 app = FastAPI(
     title="Agrotec API",
@@ -36,6 +46,9 @@ app.include_router(haciendas.router)
 app.include_router(parcelas.router)
 app.include_router(ortomosaicos.router)
 app.include_router(gfs.router)
+app.include_router(layers.router)
+app.include_router(visor_config.router)
+app.include_router(feature_info.router)
 
 # Geovisor web (static) — sirve /static/* y / (index.html)
 app.mount("/static", StaticFiles(directory="static"), name="static")

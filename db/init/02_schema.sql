@@ -106,3 +106,16 @@ BEGIN
         );
     END LOOP;
 END $$;
+
+-- ---------------- Config por capa para el geovisor -------------------------
+CREATE TABLE IF NOT EXISTS visor_layer_config (
+    id              BIGSERIAL PRIMARY KEY,
+    alternate       TEXT NOT NULL UNIQUE,
+    featured        BOOLEAN DEFAULT FALSE,
+    "order"         INTEGER DEFAULT 999,
+    default_opacity NUMERIC(3, 2) DEFAULT 1.0,
+    color           TEXT,
+    metadata        JSONB DEFAULT '{}'::jsonb,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_visor_layer_featured ON visor_layer_config (featured, "order") WHERE featured;

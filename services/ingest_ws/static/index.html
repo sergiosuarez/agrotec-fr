@@ -3,301 +3,489 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Agrotec — Geovisor</title>
+    <title>IDEPalma — Geovisor</title>
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
     <style>
         :root {
-            --agro-green: #2e7d32;
-            --agro-green-dark: #1b5e20;
-            --agro-bg: #f1f5f0;
-            --agro-panel: #ffffffd0;
-            --agro-text: #1a1a1a;
+            --palmar-green: #1B7A40;
+            --palmar-green-dark: #155a30;
+            --palmar-red: #E32630;
+            --bg: #f1f5f0;
+            --panel: #ffffffe8;
+            --text: #1a1a1a;
+            --muted: #666;
+            --border: #c8d4c5;
         }
         * { box-sizing: border-box; }
-        html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif; color: var(--agro-text); }
-        #app { display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+        html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); font-size: 14px; }
+        #app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
 
-        #sidebar {
-            background: var(--agro-bg);
-            padding: 1rem;
-            overflow-y: auto;
-            border-right: 1px solid #c8d4c5;
+        /* --- SIDEBAR --- */
+        #sidebar { background: var(--bg); border-right: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; }
+        #sidebar-header { padding: 12px 16px; background: var(--palmar-green); color: white; }
+        #sidebar-header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+        #sidebar-header .subtitle { font-size: .75rem; opacity: .85; margin-top: 2px; }
+
+        #sidebar-search { padding: 8px 12px; background: white; border-bottom: 1px solid var(--border); }
+        #sidebar-search input { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: .9rem; }
+        #sidebar-search input:focus { outline: 2px solid var(--palmar-green); border-color: transparent; }
+
+        #sidebar-tabs { display: flex; background: white; border-bottom: 1px solid var(--border); }
+        .tab { flex: 1; padding: 8px; text-align: center; font-size: .8rem; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+        .tab.active { color: var(--palmar-green); border-bottom-color: var(--palmar-green); font-weight: 600; }
+
+        #sidebar-content { flex: 1; overflow-y: auto; padding: 8px 12px; }
+
+        .category { margin-bottom: 12px; }
+        .category h2 {
+            font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+            color: var(--palmar-green-dark); margin: 4px 0 6px;
+            padding-bottom: 4px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
         }
-        #sidebar h1 { font-size: 1.3rem; margin: 0 0 .25rem; color: var(--agro-green-dark); }
-        #sidebar .subtitle { font-size: .85rem; color: #555; margin: 0 0 1rem; }
-        #sidebar section { margin-bottom: 1.5rem; }
-        #sidebar h2 { font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--agro-green-dark); margin: 0 0 .5rem; padding-bottom: .25rem; border-bottom: 1px solid #c8d4c5; }
+        .category h2 .count { font-weight: 400; color: var(--muted); font-size: .7rem; }
 
-        .layer-item { display: flex; align-items: center; padding: .35rem 0; font-size: .9rem; gap: .5rem; }
-        .layer-item input[type="checkbox"] { accent-color: var(--agro-green); }
-        .layer-item .name { flex: 1; }
-        .layer-item .fit-btn {
-            background: none; border: 1px solid var(--agro-green); color: var(--agro-green);
-            padding: 2px 6px; font-size: .75rem; border-radius: 3px; cursor: pointer;
-        }
-        .layer-item .fit-btn:hover { background: var(--agro-green); color: white; }
+        .layer-item { background: white; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+        .layer-item:hover { background: #fafffa; }
+        .layer-item.featured { border-left: 3px solid var(--palmar-green); }
+        .layer-item input[type="checkbox"] { accent-color: var(--palmar-green); cursor: pointer; }
+        .layer-item .name { flex: 1; font-size: .85rem; word-break: break-word; cursor: pointer; }
+        .layer-item .icon-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 2px 4px; font-size: .9rem; }
+        .layer-item .icon-btn:hover { color: var(--palmar-green); }
 
-        .opacity-row { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: #555; padding-left: 1.5rem; }
-        .opacity-row input[type="range"] { flex: 1; accent-color: var(--agro-green); }
+        .opacity-row { display: flex; align-items: center; gap: 6px; font-size: .7rem; color: var(--muted); padding: 4px 8px 4px 28px; background: white; margin-top: -4px; margin-bottom: 4px; border-radius: 0 0 4px 4px; }
+        .opacity-row input[type="range"] { flex: 1; accent-color: var(--palmar-green); height: 4px; }
 
-        .status { font-size: .8rem; color: #555; padding: .25rem 0; }
-        .status .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: .7rem; font-weight: 600; }
-        .badge.ok   { background: #c8e6c9; color: var(--agro-green-dark); }
+        .status-row { display: flex; gap: 6px; font-size: .7rem; padding: 6px 0; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: .65rem; font-weight: 600; }
+        .badge.ok { background: #c8e6c9; color: var(--palmar-green-dark); }
         .badge.down { background: #ffcdd2; color: #b71c1c; }
+        .badge.raster { background: #fff3cd; color: #856404; }
+        .badge.vector { background: #d4edda; color: #155724; }
 
+        #footer { padding: 8px 12px; font-size: .7rem; color: var(--muted); border-top: 1px solid var(--border); background: white; }
+        #footer a { color: var(--palmar-green); text-decoration: none; }
+        #footer a:hover { text-decoration: underline; }
+
+        /* --- MAPA --- */
+        #map-wrap { position: relative; }
         #map { width: 100%; height: 100%; }
-        .ml-info {
-            position: absolute; bottom: 10px; left: 10px;
-            background: var(--agro-panel); padding: 4px 10px; font-size: .75rem;
-            border-radius: 4px; backdrop-filter: blur(4px);
-        }
-        footer { font-size: .7rem; color: #888; margin-top: 1rem; }
-        a { color: var(--agro-green); }
-        button.primary {
-            background: var(--agro-green); color: white; border: none; padding: 6px 12px;
-            border-radius: 4px; cursor: pointer; font-size: .85rem;
-        }
-        button.primary:hover { background: var(--agro-green-dark); }
+
+        .ml-overlay { position: absolute; background: var(--panel); padding: 4px 10px; font-size: .72rem; border-radius: 4px; backdrop-filter: blur(4px); z-index: 5; }
+        #coords { bottom: 10px; left: 10px; }
+        #toolbar { top: 10px; left: 10px; display: flex; gap: 4px; padding: 4px; }
+        #toolbar button { background: white; border: 1px solid var(--border); padding: 6px 10px; font-size: .8rem; border-radius: 3px; cursor: pointer; color: var(--text); }
+        #toolbar button:hover { background: var(--palmar-green); color: white; border-color: var(--palmar-green); }
+
+        /* --- POPUPS de feature info --- */
+        .maplibregl-popup { max-width: 320px !important; }
+        .maplibregl-popup-content { padding: 0 !important; border-radius: 6px; overflow: hidden; }
+        .popup-header { background: var(--palmar-green); color: white; padding: 8px 12px; font-weight: 600; font-size: .9rem; }
+        .popup-body { padding: 8px 12px; max-height: 240px; overflow-y: auto; font-size: .8rem; }
+        .popup-body table { width: 100%; border-collapse: collapse; }
+        .popup-body td { padding: 2px 4px; border-bottom: 1px solid #eee; }
+        .popup-body td:first-child { color: var(--muted); font-size: .72rem; }
+        .popup-body td:last-child { font-weight: 500; word-break: break-word; }
+
+        /* --- ADMIN MODAL --- */
+        #admin-overlay { display: none; position: fixed; inset: 0; background: #00000080; z-index: 100; align-items: center; justify-content: center; }
+        #admin-modal { background: white; padding: 20px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        #admin-modal h2 { margin-top: 0; color: var(--palmar-green-dark); }
+        #admin-modal table { width: 100%; border-collapse: collapse; }
+        #admin-modal th, #admin-modal td { padding: 6px; text-align: left; border-bottom: 1px solid var(--border); font-size: .85rem; }
+        #admin-modal button.close { background: var(--palmar-green); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 12px; }
+
+        .empty { color: var(--muted); font-style: italic; padding: 12px 0; font-size: .85rem; text-align: center; }
+        .loading { color: var(--muted); padding: 12px 0; font-size: .85rem; text-align: center; }
     </style>
 </head>
 <body>
 <div id="app">
     <aside id="sidebar">
-        <h1>🌱 Agrotec</h1>
-        <p class="subtitle">Geovisor agrícola</p>
+        <div id="sidebar-header">
+            <h1>🌱 IDEPalma</h1>
+            <div class="subtitle">Geovisor Corporación PALMAR</div>
+        </div>
 
-        <section>
-            <h2>Mapa base</h2>
-            <div class="layer-item">
-                <input type="radio" name="basemap" id="bm-osm" value="osm" checked>
-                <label class="name" for="bm-osm">OpenStreetMap</label>
+        <div id="sidebar-search">
+            <input id="search-input" type="text" placeholder="🔍 Buscar capa por nombre…">
+        </div>
+
+        <div id="sidebar-tabs">
+            <div class="tab active" data-tab="layers">Capas</div>
+            <div class="tab" data-tab="basemap">Mapa base</div>
+            <div class="tab" data-tab="status">Estado</div>
+        </div>
+
+        <div id="sidebar-content">
+            <div id="tab-layers"><div class="loading">cargando capas…</div></div>
+            <div id="tab-basemap" style="display:none">
+                <div class="category">
+                    <h2>Mapa base</h2>
+                    <div class="layer-item"><input type="radio" name="basemap" id="bm-osm" value="osm" checked><label class="name" for="bm-osm">OpenStreetMap</label></div>
+                    <div class="layer-item"><input type="radio" name="basemap" id="bm-sat" value="esri-sat"><label class="name" for="bm-sat">Satélite (Esri)</label></div>
+                    <div class="layer-item"><input type="radio" name="basemap" id="bm-light" value="cartolight"><label class="name" for="bm-light">Mapa claro (Carto)</label></div>
+                </div>
             </div>
-            <div class="layer-item">
-                <input type="radio" name="basemap" id="bm-sat" value="esri-sat">
-                <label class="name" for="bm-sat">Satélite (Esri)</label>
+            <div id="tab-status" style="display:none">
+                <div class="category">
+                    <h2>Servicios</h2>
+                    <div id="health-box"><div class="loading">cargando…</div></div>
+                </div>
+                <div class="category">
+                    <h2>Meteorología GFS</h2>
+                    <div id="gfs-box"><div class="loading">cargando…</div></div>
+                </div>
             </div>
-        </section>
+        </div>
 
-        <section>
-            <h2>Ortomosaicos drone</h2>
-            <div id="orthos-list"><em style="color:#888">cargando…</em></div>
-        </section>
-
-        <section>
-            <h2>Meteorología (GFS)</h2>
-            <div id="gfs-status" class="status">cargando…</div>
-        </section>
-
-        <section>
-            <h2>Estado servicios</h2>
-            <div id="health" class="status">cargando…</div>
-        </section>
-
-        <footer>
-            <a href="/docs" target="_blank">API docs</a> ·
-            <a href="/agrotec-geonode/" target="_blank">GeoNode admin</a>
-        </footer>
+        <div id="footer">
+            <button id="btn-share" style="background:none;border:1px solid var(--border);padding:4px 8px;border-radius:3px;cursor:pointer;font-size:.7rem;">🔗 Compartir vista</button>
+            <button id="btn-admin" style="background:none;border:1px solid var(--border);padding:4px 8px;border-radius:3px;cursor:pointer;font-size:.7rem;margin-left:4px;">⚙ Admin</button>
+            <br><br>
+            <a href="/docs" target="_blank">API</a> ·
+            <a href="/" target="_blank">GeoNode</a> ·
+            <a href="/catalogue/#/map/new" target="_blank">MapStore</a>
+        </div>
     </aside>
 
-    <main style="position: relative;">
+    <main id="map-wrap">
         <div id="map"></div>
-        <div class="ml-info" id="coords">Esperando mapa…</div>
+        <div class="ml-overlay" id="toolbar">
+            <button id="btn-fit-all" title="Encuadrar capas activas">⊕ Fit</button>
+            <button id="btn-reset" title="Restablecer vista">↻ Reset</button>
+        </div>
+        <div class="ml-overlay" id="coords">—</div>
     </main>
+</div>
+
+<!-- Admin modal -->
+<div id="admin-overlay">
+    <div id="admin-modal">
+        <h2>⚙ Admin del visor</h2>
+        <p style="font-size:.85rem;color:var(--muted);">Marca como <b>destacadas</b> las capas que quieres que aparezcan por defecto activadas. Define el orden de aparición.</p>
+        <table id="admin-table"><thead><tr><th>Capa</th><th>Destacada</th><th>Orden</th></tr></thead><tbody></tbody></table>
+        <button class="close">Cerrar</button>
+    </div>
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 // ============================================================================
-// Geovisor Agrotec — MapLibre GL JS
+// IDEPalma Geovisor v2 — MapLibre GL JS
 // ============================================================================
 
-const API_BASE = '';   // mismo origen
-const WMS_BASE = 'https://agrotec.desarrollowebsite.com/geoserver/ows';
-
-// Bbox aproximado del set inicial AP_TEMP (Ecuador, Zamora-Chinchipe)
-const DEFAULT_CENTER = [-79.864, -3.167];
-const DEFAULT_ZOOM   = 17;
+const API = "";
+const DEFAULT_CENTER = [-79.5, -2.0];   // Ecuador
+const DEFAULT_ZOOM = 6;
 
 // --- Mapa base styles ---
 const BASEMAPS = {
-    'osm': {
-        version: 8,
-        sources: {
-            osm: {
-                type: 'raster',
-                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-                tileSize: 256,
-                attribution: '© OpenStreetMap contributors',
-            }
-        },
-        layers: [{ id: 'osm-tiles', type: 'raster', source: 'osm' }]
-    },
-    'esri-sat': {
-        version: 8,
-        sources: {
-            esri: {
-                type: 'raster',
-                tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-                tileSize: 256,
-                attribution: '© Esri, Maxar, Earthstar Geographics',
-            }
-        },
-        layers: [{ id: 'esri-tiles', type: 'raster', source: 'esri' }]
-    }
+    osm:        { tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], attr: '© OpenStreetMap' },
+    'esri-sat': { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], attr: '© Esri, Maxar' },
+    cartolight: { tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'], attr: '© Carto' }
 };
-
-const map = new maplibregl.Map({
-    container: 'map',
-    style: BASEMAPS.osm,
-    center: DEFAULT_CENTER,
-    zoom: DEFAULT_ZOOM,
-});
-map.addControl(new maplibregl.NavigationControl(), 'top-right');
-map.addControl(new maplibregl.ScaleControl(), 'bottom-right');
-map.on('mousemove', e => {
-    document.getElementById('coords').textContent =
-        `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)} — zoom ${map.getZoom().toFixed(1)}`;
-});
-
-// Cambio de mapa base preservando overlays WMS
-document.querySelectorAll('input[name="basemap"]').forEach(el => {
-    el.addEventListener('change', () => {
-        const newStyle = JSON.parse(JSON.stringify(BASEMAPS[el.value]));
-        // copiar overlays activos al nuevo estilo
-        for (const [id, info] of Object.entries(activeWmsLayers)) {
-            if (info.visible) {
-                newStyle.sources[id] = wmsSource(info.alternate);
-                newStyle.layers.push({
-                    id, type: 'raster', source: id,
-                    paint: { 'raster-opacity': info.opacity }
-                });
-            }
-        }
-        map.setStyle(newStyle);
-    });
-});
-
-// --- WMS overlays ---
-const activeWmsLayers = {};   // { 'ortho-1': { alternate, visible, opacity } }
-
-function wmsSource(alternate) {
-    const url = `${WMS_BASE}?service=WMS&version=1.1.0&request=GetMap`
-              + `&layers=${alternate}&styles=&format=image/png&transparent=true`
-              + `&srs=EPSG:3857&bbox={bbox-epsg-3857}&width=512&height=512`;
+function basemapStyle(key) {
+    const b = BASEMAPS[key];
     return {
-        type: 'raster',
-        tiles: [url],
-        tileSize: 512,
-        attribution: 'Agrotec / GeoServer',
+        version: 8,
+        sources: { bm: { type: 'raster', tiles: b.tiles, tileSize: 256, attribution: b.attr } },
+        layers: [{ id: 'bm', type: 'raster', source: 'bm' }]
     };
 }
 
-function addWmsLayer(id, alternate, opacity = 1) {
-    if (map.getLayer(id)) map.removeLayer(id);
-    if (map.getSource(id)) map.removeSource(id);
-    map.addSource(id, wmsSource(alternate));
-    map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': opacity } });
-    activeWmsLayers[id] = { alternate, visible: true, opacity };
-}
-
-function removeWmsLayer(id) {
-    if (map.getLayer(id)) map.removeLayer(id);
-    if (map.getSource(id)) map.removeSource(id);
-    if (activeWmsLayers[id]) activeWmsLayers[id].visible = false;
-}
-
-function setOpacity(id, opacity) {
-    if (map.getLayer(id)) map.setPaintProperty(id, 'raster-opacity', opacity);
-    if (activeWmsLayers[id]) activeWmsLayers[id].opacity = opacity;
-}
-
-// --- Bootstrap: cargar ortomosaicos + GFS + health ---
-async function loadOrthos() {
-    const list = document.getElementById('orthos-list');
-    try {
-        const r = await fetch(`${API_BASE}/api/v1/ortomosaicos?sync=true`);
-        const orthos = await r.json();
-        if (!orthos.length) { list.innerHTML = '<em>(sin ortomosaicos)</em>'; return; }
-        list.innerHTML = '';
-        orthos.forEach((o, i) => {
-            const id = `ortho-${i}`;
-            const row = document.createElement('div');
-            row.className = 'layer-item';
-            row.innerHTML = `
-                <input type="checkbox" id="${id}-cb">
-                <label class="name" for="${id}-cb">${o.geonode_alternate.replace('geonode:', '')}</label>
-                <button class="fit-btn" data-alt="${o.geonode_alternate}">⊕</button>
-            `;
-            list.appendChild(row);
-            const opRow = document.createElement('div');
-            opRow.className = 'opacity-row';
-            opRow.innerHTML = `<span>opacidad</span><input type="range" id="${id}-op" min="0" max="100" value="100">`;
-            opRow.style.display = 'none';
-            list.appendChild(opRow);
-
-            row.querySelector(`#${id}-cb`).addEventListener('change', e => {
-                if (e.target.checked) {
-                    addWmsLayer(id, o.geonode_alternate);
-                    opRow.style.display = 'flex';
-                } else {
-                    removeWmsLayer(id);
-                    opRow.style.display = 'none';
-                }
-            });
-            opRow.querySelector('input').addEventListener('input', e => {
-                setOpacity(id, e.target.value / 100);
-            });
-            row.querySelector('.fit-btn').addEventListener('click', () => {
-                // Vuelve a la vista por defecto (centroide AP_TEMP)
-                map.flyTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM });
-            });
-        });
-    } catch (e) {
-        list.innerHTML = `<em style="color:#c00">error: ${e.message}</em>`;
-    }
-}
-
-async function loadGFS() {
-    const el = document.getElementById('gfs-status');
-    try {
-        const r = await fetch(`${API_BASE}/api/v1/gfs/status`);
-        const d = await r.json();
-        if (!d.available) {
-            el.innerHTML = '<span class="badge down">no disponible</span>';
-            return;
-        }
-        const mod = new Date(d.last_modified).toLocaleString();
-        const fileLinks = d.files.map(f =>
-            `<a href="${f.thredds_url}" target="_blank">${f.name}</a> (${(f.size_bytes/1024).toFixed(0)} KB)`
-        ).join('<br>');
-        el.innerHTML = `
-            <span class="badge ok">disponible</span><br>
-            <small>actualizado: ${mod}</small><br>
-            ${fileLinks}
-        `;
-    } catch (e) {
-        el.innerHTML = `<em style="color:#c00">error: ${e.message}</em>`;
-    }
-}
-
-async function loadHealth() {
-    const el = document.getElementById('health');
-    try {
-        const r = await fetch(`${API_BASE}/health`);
-        const d = await r.json();
-        el.innerHTML = ['db', 'geonode', 'thredds'].map(k =>
-            `<div>${k}: <span class="badge ${d[k] === 'ok' ? 'ok' : 'down'}">${d[k]}</span></div>`
-        ).join('');
-    } catch (e) {
-        el.innerHTML = `<em style="color:#c00">error: ${e.message}</em>`;
-    }
-}
-
-map.on('load', () => {
-    loadOrthos();
-    loadGFS();
-    loadHealth();
+const map = new maplibregl.Map({
+    container: 'map',
+    style: basemapStyle('osm'),
+    center: DEFAULT_CENTER,
+    zoom: DEFAULT_ZOOM
 });
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+map.addControl(new maplibregl.ScaleControl(), 'bottom-right');
+
+// --- Estado ---
+const state = {
+    layers: [],          // todas las capas del API
+    activeLayers: {},    // { alternate: {opacity, source} }
+};
+
+// --- Bootstrap: cargar capas + health + GFS ---
+async function loadAll() {
+    try {
+        const r = await fetch(`${API}/api/v1/layers`);
+        state.layers = await r.json();
+        renderLayersTab();
+        // Activar las featured automáticamente
+        state.layers.filter(l => l.featured).forEach(l => addWmsLayer(l));
+        if (state.layers.some(l => l.featured)) fitToFeatured();
+    } catch (e) {
+        document.getElementById('tab-layers').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+    }
+    loadHealth(); loadGFS();
+    parseUrlState();
+}
+
+function renderLayersTab() {
+    const q = document.getElementById('search-input').value.toLowerCase();
+    const filtered = q ? state.layers.filter(l => (l.title + l.alternate).toLowerCase().includes(q)) : state.layers;
+
+    if (filtered.length === 0) {
+        document.getElementById('tab-layers').innerHTML = '<div class="empty">Sin resultados</div>';
+        return;
+    }
+    // Agrupar por categoria
+    const byCat = {};
+    filtered.forEach(l => (byCat[l.category] ||= []).push(l));
+
+    const CAT_LABELS = { ortomosaicos: '🛩 Ortomosaicos drone', haciendas: '🌾 Haciendas y lotes', vectoriales: '📐 Vectoriales', limites: '🗺 Límites administrativos', infraestructura: '🛣 Infraestructura', raster_otros: '🖼 Otros rasters', otros: '📦 Otros' };
+
+    const html = Object.entries(byCat).map(([cat, items]) => `
+        <div class="category">
+            <h2>${CAT_LABELS[cat] || cat} <span class="count">${items.length}</span></h2>
+            ${items.map(l => renderLayerItem(l)).join('')}
+        </div>
+    `).join('');
+    document.getElementById('tab-layers').innerHTML = html;
+
+    // Bind events
+    document.querySelectorAll('.layer-item input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', e => {
+            const alt = e.target.dataset.alt;
+            const layer = state.layers.find(l => l.alternate === alt);
+            e.target.checked ? addWmsLayer(layer) : removeWmsLayer(alt);
+            updateUrlState();
+        });
+    });
+    document.querySelectorAll('.layer-item .fit-btn').forEach(b => {
+        b.addEventListener('click', e => {
+            const alt = e.target.dataset.alt;
+            fitToLayer(state.layers.find(l => l.alternate === alt));
+        });
+    });
+    document.querySelectorAll('.opacity-row input[type="range"]').forEach(r => {
+        r.addEventListener('input', e => {
+            const alt = e.target.dataset.alt;
+            setOpacity(alt, e.target.value / 100);
+        });
+    });
+}
+
+function renderLayerItem(l) {
+    const id = 'lay-' + l.alternate.replace(/[^a-z0-9]/gi, '_');
+    const active = !!state.activeLayers[l.alternate];
+    const opacity = state.activeLayers[l.alternate]?.opacity ?? l.default_opacity;
+    return `
+        <div class="layer-item ${l.featured ? 'featured' : ''}">
+            <input type="checkbox" id="${id}" data-alt="${l.alternate}" ${active ? 'checked' : ''}>
+            <label class="name" for="${id}" title="${l.alternate}">${l.title}
+                <span class="badge ${l.subtype}">${l.subtype}</span>
+            </label>
+            <button class="icon-btn fit-btn" data-alt="${l.alternate}" title="Zoom a capa">⊕</button>
+        </div>
+        ${active ? `<div class="opacity-row"><span>opacidad</span><input type="range" data-alt="${l.alternate}" min="0" max="100" value="${Math.round(opacity*100)}"></div>` : ''}
+    `;
+}
+
+// --- WMS layer management ---
+function addWmsLayer(layer) {
+    const id = 'l_' + layer.alternate.replace(/[^a-z0-9]/gi, '_');
+    if (map.getLayer(id)) return;
+    map.addSource(id, {
+        type: 'raster',
+        tiles: [layer.wms_url],
+        tileSize: 512,
+        attribution: 'IDEPalma / GeoServer'
+    });
+    map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': layer.default_opacity } });
+    state.activeLayers[layer.alternate] = { opacity: layer.default_opacity, sourceId: id, subtype: layer.subtype };
+    renderLayersTab();
+    setTimeout(updateUrlState, 50);
+}
+
+function removeWmsLayer(alt) {
+    const info = state.activeLayers[alt];
+    if (!info) return;
+    if (map.getLayer(info.sourceId)) map.removeLayer(info.sourceId);
+    if (map.getSource(info.sourceId)) map.removeSource(info.sourceId);
+    delete state.activeLayers[alt];
+    renderLayersTab();
+    updateUrlState();
+}
+
+function setOpacity(alt, op) {
+    const info = state.activeLayers[alt];
+    if (!info || !map.getLayer(info.sourceId)) return;
+    map.setPaintProperty(info.sourceId, 'raster-opacity', op);
+    info.opacity = op;
+}
+
+function fitToLayer(layer) {
+    if (!layer?.bbox) { alert('Sin bbox disponible'); return; }
+    map.fitBounds([[layer.bbox[0], layer.bbox[1]], [layer.bbox[2], layer.bbox[3]]], { padding: 50, maxZoom: 20 });
+}
+
+function fitToFeatured() {
+    const featured = state.layers.filter(l => l.featured && l.bbox);
+    if (featured.length === 0) return;
+    const lons = featured.flatMap(l => [l.bbox[0], l.bbox[2]]);
+    const lats = featured.flatMap(l => [l.bbox[1], l.bbox[3]]);
+    map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 50 });
+}
+
+// --- Cambio de mapa base preservando capas WMS ---
+function changeBasemap(key) {
+    const newStyle = basemapStyle(key);
+    Object.entries(state.activeLayers).forEach(([alt, info]) => {
+        const layer = state.layers.find(l => l.alternate === alt);
+        newStyle.sources[info.sourceId] = { type: 'raster', tiles: [layer.wms_url], tileSize: 512 };
+        newStyle.layers.push({ id: info.sourceId, type: 'raster', source: info.sourceId, paint: { 'raster-opacity': info.opacity } });
+    });
+    map.setStyle(newStyle);
+}
+
+// --- Click en feature vectorial → popup ---
+map.on('click', async e => {
+    const vectorLayers = Object.entries(state.activeLayers).filter(([_, i]) => i.subtype === 'vector');
+    if (vectorLayers.length === 0) return;
+    const [alt] = vectorLayers[0]; // usar la primera vector activa
+    const bbox = map.getBounds().toArray().flat();
+    const bbox3857 = [
+        lngToMercatorX(bbox[0]), latToMercatorY(bbox[1]),
+        lngToMercatorX(bbox[2]), latToMercatorY(bbox[3])
+    ].join(',');
+    const canvas = map.getCanvas();
+    const x = Math.round((e.point.x / canvas.clientWidth) * 256);
+    const y = Math.round((e.point.y / canvas.clientHeight) * 256);
+    try {
+        const r = await fetch(`${API}/api/v1/feature-info?layer=${encodeURIComponent(alt)}&bbox=${bbox3857}&x=${x}&y=${y}&width=256&height=256`);
+        const data = await r.json();
+        if (data.features?.length > 0) {
+            const f = data.features[0];
+            const props = f.properties || {};
+            const rows = Object.entries(props).filter(([k]) => !k.startsWith('the_geom') && k !== 'bbox')
+                .map(([k, v]) => `<tr><td>${k}</td><td>${v ?? '-'}</td></tr>`).join('');
+            new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`
+                <div class="popup-header">${alt.split(':').pop()}</div>
+                <div class="popup-body"><table>${rows}</table></div>
+            `).addTo(map);
+        }
+    } catch (err) { console.warn('feature-info error:', err); }
+});
+
+function lngToMercatorX(lng) { return lng * 20037508.34 / 180; }
+function latToMercatorY(lat) {
+    const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+    return y * 20037508.34 / 180;
+}
+
+// --- Status panels ---
+async function loadHealth() {
+    try {
+        const r = await fetch(`${API}/health`);
+        const d = await r.json();
+        document.getElementById('health-box').innerHTML = ['db', 'geonode', 'thredds'].map(k =>
+            `<div class="status-row"><span>${k}</span><span class="badge ${d[k]==='ok'?'ok':'down'}">${d[k]}</span></div>`).join('');
+    } catch (e) { document.getElementById('health-box').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+async function loadGFS() {
+    try {
+        const r = await fetch(`${API}/api/v1/gfs/status`);
+        const d = await r.json();
+        if (!d.available) { document.getElementById('gfs-box').innerHTML = '<span class="badge down">no disponible</span>'; return; }
+        document.getElementById('gfs-box').innerHTML = `
+            <span class="badge ok">disponible</span>
+            <div style="margin-top:6px;font-size:.7rem;color:var(--muted);">${new Date(d.last_modified).toLocaleString()}</div>
+            ${d.files.map(f => `<div style="font-size:.7rem;"><a href="${f.thredds_url}" target="_blank">${f.name}</a> (${Math.round(f.size_bytes/1024)} KB)</div>`).join('')}
+        `;
+    } catch (e) { document.getElementById('gfs-box').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// --- Tabs ---
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+    ['layers', 'basemap', 'status'].forEach(name => {
+        document.getElementById('tab-' + name).style.display = (name === t.dataset.tab) ? '' : 'none';
+    });
+}));
+
+// --- Basemap radios ---
+document.querySelectorAll('input[name="basemap"]').forEach(r => r.addEventListener('change', e => changeBasemap(e.target.value)));
+
+// --- Search ---
+document.getElementById('search-input').addEventListener('input', renderLayersTab);
+
+// --- Coords ---
+map.on('mousemove', e => document.getElementById('coords').textContent = `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)} — z ${map.getZoom().toFixed(1)}`);
+
+// --- Toolbar ---
+document.getElementById('btn-fit-all').addEventListener('click', () => {
+    const active = Object.keys(state.activeLayers).map(alt => state.layers.find(l => l.alternate === alt)).filter(l => l?.bbox);
+    if (active.length === 0) { alert('No hay capas activas con bbox'); return; }
+    const lons = active.flatMap(l => [l.bbox[0], l.bbox[2]]);
+    const lats = active.flatMap(l => [l.bbox[1], l.bbox[3]]);
+    map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 50 });
+});
+document.getElementById('btn-reset').addEventListener('click', () => map.flyTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }));
+
+// --- URL state (compartir vista) ---
+function updateUrlState() {
+    const params = new URLSearchParams();
+    const active = Object.keys(state.activeLayers);
+    if (active.length) params.set('l', active.join(','));
+    const c = map.getCenter();
+    params.set('z', map.getZoom().toFixed(2));
+    params.set('lat', c.lat.toFixed(5));
+    params.set('lng', c.lng.toFixed(5));
+    history.replaceState(null, '', '?' + params.toString());
+}
+function parseUrlState() {
+    const params = new URLSearchParams(location.search);
+    const ls = params.get('l');
+    if (ls) {
+        ls.split(',').forEach(alt => {
+            const l = state.layers.find(x => x.alternate === alt);
+            if (l && !state.activeLayers[alt]) addWmsLayer(l);
+        });
+    }
+    const z = parseFloat(params.get('z')), lat = parseFloat(params.get('lat')), lng = parseFloat(params.get('lng'));
+    if (!isNaN(z) && !isNaN(lat) && !isNaN(lng)) map.jumpTo({ center: [lng, lat], zoom: z });
+}
+map.on('moveend', updateUrlState);
+
+document.getElementById('btn-share').addEventListener('click', () => {
+    updateUrlState();
+    navigator.clipboard.writeText(location.href).then(() => alert('URL copiada al portapapeles\n\n' + location.href));
+});
+
+// --- Admin modal ---
+document.getElementById('btn-admin').addEventListener('click', () => {
+    const tbody = document.querySelector('#admin-table tbody');
+    tbody.innerHTML = state.layers.map(l => `
+        <tr>
+            <td>${l.title}<br><small style="color:var(--muted);">${l.alternate}</small></td>
+            <td><input type="checkbox" data-alt="${l.alternate}" data-field="featured" ${l.featured ? 'checked' : ''}></td>
+            <td><input type="number" data-alt="${l.alternate}" data-field="order" value="${l.order}" style="width:60px;"></td>
+        </tr>
+    `).join('');
+    document.getElementById('admin-overlay').style.display = 'flex';
+    tbody.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('change', async e => {
+            const alt = e.target.dataset.alt, field = e.target.dataset.field;
+            const value = field === 'featured' ? e.target.checked : parseInt(e.target.value);
+            const body = { alternate: alt, [field]: value };
+            await fetch(`${API}/api/v1/visor/config`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            const layer = state.layers.find(l => l.alternate === alt);
+            if (layer) layer[field] = value;
+        });
+    });
+});
+document.querySelector('#admin-modal button.close').addEventListener('click', () => {
+    document.getElementById('admin-overlay').style.display = 'none';
+    renderLayersTab();
+});
+
+// --- GO ---
+map.on('load', loadAll);
 </script>
 </body>
 </html>
