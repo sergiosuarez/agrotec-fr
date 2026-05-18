@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>IDEPalma — Geovisor</title>
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     <style>
         :root {
             --palmar-green: #1B7A40;
@@ -97,6 +98,31 @@
 
         .empty { color: var(--muted); font-style: italic; padding: 12px 0; font-size: .85rem; text-align: center; }
         .loading { color: var(--muted); padding: 12px 0; font-size: .85rem; text-align: center; }
+
+        /* --- PANEL INFERIOR DE METEOROLOGIA --- */
+        #bottom-panel {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            background: white; border-top: 1px solid var(--border);
+            max-height: 50vh; min-height: 280px;
+            transition: transform .25s ease;
+            transform: translateY(100%);
+            z-index: 4;
+            display: flex; flex-direction: column;
+        }
+        #bottom-panel.open { transform: translateY(0); }
+        #bottom-panel-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 12px; background: var(--palmar-green); color: white;
+            font-size: .85rem;
+        }
+        #bottom-panel-header .title { flex: 1; font-weight: 600; }
+        #bottom-panel-header button { background: none; border: 1px solid #ffffff60; color: white; padding: 3px 8px; font-size: .75rem; border-radius: 3px; cursor: pointer; }
+        #bottom-panel-header button:hover { background: #ffffff20; }
+        #bottom-tabs { display: flex; background: #f8f8f8; border-bottom: 1px solid var(--border); }
+        #bottom-tabs .tab { padding: 6px 14px; font-size: .8rem; }
+        #bottom-content { flex: 1; padding: 8px 12px; overflow: hidden; }
+        #chart-pron, #chart-prof { width: 100%; height: 100%; min-height: 220px; }
+        .panel-loading { padding: 40px; text-align: center; color: var(--muted); }
     </style>
 </head>
 <body>
@@ -154,8 +180,25 @@
         <div class="ml-overlay" id="toolbar">
             <button id="btn-fit-all" title="Encuadrar capas activas">⊕ Fit</button>
             <button id="btn-reset" title="Restablecer vista">↻ Reset</button>
+            <button id="btn-meteo" title="Pronostico GFS en el centro del mapa">🌦 GFS</button>
         </div>
         <div class="ml-overlay" id="coords">—</div>
+
+        <!-- Panel inferior con graficos meteorologicos -->
+        <div id="bottom-panel">
+            <div id="bottom-panel-header">
+                <span class="title">🌦 Pronóstico GFS — <span id="meteo-coords">…</span></span>
+                <button id="btn-close-meteo">✕ Cerrar</button>
+            </div>
+            <div id="bottom-tabs">
+                <div class="tab active" data-mtab="pron">Pronóstico (40 pasos / 5 días)</div>
+                <div class="tab" data-mtab="prof">Perfil vertical (6 niveles)</div>
+            </div>
+            <div id="bottom-content">
+                <div id="chart-pron" style="display:block"></div>
+                <div id="chart-prof" style="display:none"></div>
+            </div>
+        </div>
     </main>
 </div>
 
@@ -379,40 +422,32 @@ function changeBasemap(key) {
     map.setStyle(newStyle);
 }
 
-// --- Click en feature vectorial → popup ---
+// --- Click en mapa: probar TODAS las capas vectoriales activas, mostrar popup con la primera que tenga feature ---
 map.on('click', async e => {
     const vectorLayers = Object.entries(state.activeLayers).filter(([_, i]) => i.subtype === 'vector');
     if (vectorLayers.length === 0) return;
-    const [alt] = vectorLayers[0]; // usar la primera vector activa
-    const bbox = map.getBounds().toArray().flat();
-    const bbox3857 = [
-        lngToMercatorX(bbox[0]), latToMercatorY(bbox[1]),
-        lngToMercatorX(bbox[2]), latToMercatorY(bbox[3])
-    ].join(',');
-    const canvas = map.getCanvas();
-    const x = Math.round((e.point.x / canvas.clientWidth) * 256);
-    const y = Math.round((e.point.y / canvas.clientHeight) * 256);
-    try {
-        const r = await fetch(`${API}/api/v1/feature-info?layer=${encodeURIComponent(alt)}&bbox=${bbox3857}&x=${x}&y=${y}&width=256&height=256`);
-        const data = await r.json();
-        if (data.features?.length > 0) {
-            const f = data.features[0];
-            const props = f.properties || {};
-            const rows = Object.entries(props).filter(([k]) => !k.startsWith('the_geom') && k !== 'bbox')
-                .map(([k, v]) => `<tr><td>${k}</td><td>${v ?? '-'}</td></tr>`).join('');
-            new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`
-                <div class="popup-header">${alt.split(':').pop()}</div>
-                <div class="popup-body"><table>${rows}</table></div>
-            `).addTo(map);
-        }
-    } catch (err) { console.warn('feature-info error:', err); }
+    const lat = e.lngLat.lat, lng = e.lngLat.lng;
+    // Probar cada capa vector activa, tomar la PRIMERA que devuelva un feature
+    for (const [alt] of vectorLayers) {
+        try {
+            const r = await fetch(`${API}/api/v1/feature-info?layer=${encodeURIComponent(alt)}&lat=${lat}&lng=${lng}`);
+            const data = await r.json();
+            if (data.features?.length > 0) {
+                const f = data.features[0];
+                const props = f.properties || {};
+                const rows = Object.entries(props)
+                    .filter(([k]) => !k.startsWith('the_geom') && !k.startsWith('geometry') && k !== 'bbox')
+                    .map(([k, v]) => `<tr><td>${k}</td><td>${v ?? '-'}</td></tr>`).join('');
+                const title = alt.split(':').pop();
+                new maplibregl.Popup({ maxWidth: '360px' }).setLngLat(e.lngLat).setHTML(`
+                    <div class="popup-header">${title}</div>
+                    <div class="popup-body">${rows ? `<table>${rows}</table>` : '<em>Sin atributos</em>'}</div>
+                `).addTo(map);
+                return;  // primer match gana
+            }
+        } catch (err) { console.warn(`feature-info ${alt} error:`, err); }
+    }
 });
-
-function lngToMercatorX(lng) { return lng * 20037508.34 / 180; }
-function latToMercatorY(lat) {
-    const y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
-    return y * 20037508.34 / 180;
-}
 
 // --- Status panels ---
 async function loadHealth() {
@@ -519,6 +554,141 @@ document.querySelector('#admin-modal button.close').addEventListener('click', ()
     document.getElementById('admin-overlay').style.display = 'none';
     renderLayersTab();
 });
+
+// ============================================================================
+// PANEL METEOROLOGIA (ECharts) — Pronostico + Perfil vertical
+// ============================================================================
+
+let chartPron = null, chartProf = null;
+
+function openMeteoPanel(lat, lng) {
+    document.getElementById('bottom-panel').classList.add('open');
+    document.getElementById('meteo-coords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    // Resize map after panel opens
+    setTimeout(() => map.resize(), 280);
+
+    loadMeteoPron(lat, lng);
+    // El perfil se carga al cambiar tab (lazy)
+    document.getElementById('chart-prof').dataset.lat = lat;
+    document.getElementById('chart-prof').dataset.lng = lng;
+    document.getElementById('chart-prof').dataset.loaded = '';
+}
+
+function closeMeteoPanel() {
+    document.getElementById('bottom-panel').classList.remove('open');
+    setTimeout(() => map.resize(), 280);
+}
+
+async function loadMeteoPron(lat, lng) {
+    const el = document.getElementById('chart-pron');
+    el.innerHTML = '<div class="panel-loading">cargando pronóstico…</div>';
+    try {
+        const r = await fetch(`${API}/api/v1/gfs/point?lat=${lat}&lng=${lng}`);
+        if (!r.ok) {
+            const e = await r.json();
+            el.innerHTML = `<div class="panel-loading" style="color:#c00;">${e.detail || 'sin datos'}</div>`;
+            return;
+        }
+        const d = await r.json();
+        el.innerHTML = '';
+        if (chartPron) chartPron.dispose();
+        chartPron = echarts.init(el);
+        chartPron.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+            legend: { data: ['Temp (°C)', 'HR (%)', 'Lluvia (mm/h)', 'Viento (m/s)', 'Solar (W/m²)'], top: 4, textStyle: { fontSize: 11 } },
+            grid: { left: 50, right: 60, top: 36, bottom: 30 },
+            xAxis: { type: 'time' },
+            yAxis: [
+                { type: 'value', name: '°C / m/s / mm·h⁻¹', position: 'left', nameTextStyle: { fontSize: 10 } },
+                { type: 'value', name: '%  /  W·m⁻²', position: 'right', nameTextStyle: { fontSize: 10 } }
+            ],
+            series: [
+                { name: 'Temp (°C)',     type: 'line', smooth: true, yAxisIndex: 0, data: d.t,     itemStyle: { color: '#e74c3c' }, lineStyle: { width: 2 } },
+                { name: 'HR (%)',        type: 'line', smooth: true, yAxisIndex: 1, data: d.rh,    itemStyle: { color: '#3498db' }, lineStyle: { width: 1.5 } },
+                { name: 'Lluvia (mm/h)', type: 'bar',  yAxisIndex: 0, data: d.precip,             itemStyle: { color: '#5dade2' } },
+                { name: 'Viento (m/s)',  type: 'line', yAxisIndex: 0, data: d.wind.map(([t, s]) => [t, s]), itemStyle: { color: '#16a085' }, lineStyle: { width: 1 } },
+                { name: 'Solar (W/m²)',  type: 'line', yAxisIndex: 1, data: d.solar, itemStyle: { color: '#f39c12' }, lineStyle: { width: 1 }, areaStyle: { color: '#f39c1240' } }
+            ]
+        });
+    } catch (err) {
+        el.innerHTML = `<div class="panel-loading" style="color:#c00;">Error: ${err.message}</div>`;
+    }
+}
+
+async function loadMeteoProf(lat, lng) {
+    const el = document.getElementById('chart-prof');
+    el.innerHTML = '<div class="panel-loading">cargando perfil vertical…</div>';
+    try {
+        const r = await fetch(`${API}/api/v1/gfs/profile?lat=${lat}&lng=${lng}`);
+        if (!r.ok) {
+            const e = await r.json();
+            el.innerHTML = `<div class="panel-loading" style="color:#c00;">${e.detail || 'sin datos'}</div>`;
+            return;
+        }
+        const d = await r.json();
+        el.innerHTML = '';
+        if (chartProf) chartProf.dispose();
+        chartProf = echarts.init(el);
+        // Perfil vertical: niveles en eje Y (presion), valor en eje X
+        chartProf.setOption({
+            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+            legend: { data: ['Temperatura (°C)', 'Humedad relativa (%)'], top: 4, textStyle: { fontSize: 11 } },
+            grid: { left: 60, right: 80, top: 36, bottom: 36 },
+            xAxis: [
+                { type: 'value', name: 'Temp (°C)', position: 'bottom', nameTextStyle: { fontSize: 10 }, axisLabel: { color: '#e74c3c' } },
+                { type: 'value', name: 'HR (%)', position: 'top', nameTextStyle: { fontSize: 10 }, axisLabel: { color: '#3498db' }, min: 0, max: 100 }
+            ],
+            yAxis: {
+                type: 'category',
+                name: 'Presión (hPa)',
+                inverse: false,   // 1000 abajo, 300 arriba (atmosferico real)
+                data: d.levels_hpa.map(String),
+                axisLabel: { fontSize: 11 }
+            },
+            series: [
+                { name: 'Temperatura (°C)', type: 'line', xAxisIndex: 0, data: d.t_celsius.map((v, i) => [v, String(d.levels_hpa[i])]), symbol: 'circle', symbolSize: 8, itemStyle: { color: '#e74c3c' }, lineStyle: { width: 2 } },
+                { name: 'Humedad relativa (%)', type: 'line', xAxisIndex: 1, data: d.rh_pct.map((v, i) => [v, String(d.levels_hpa[i])]), symbol: 'diamond', symbolSize: 8, itemStyle: { color: '#3498db' }, lineStyle: { width: 2 } }
+            ]
+        });
+    } catch (err) {
+        el.innerHTML = `<div class="panel-loading" style="color:#c00;">Error: ${err.message}</div>`;
+    }
+}
+
+// Tabs del panel inferior
+document.querySelectorAll('#bottom-tabs .tab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('#bottom-tabs .tab').forEach(x => x.classList.toggle('active', x === t));
+    const show = t.dataset.mtab;
+    document.getElementById('chart-pron').style.display = show === 'pron' ? 'block' : 'none';
+    document.getElementById('chart-prof').style.display = show === 'prof' ? 'block' : 'none';
+    // Lazy load perfil
+    const profEl = document.getElementById('chart-prof');
+    if (show === 'prof' && profEl.dataset.lat && !profEl.dataset.loaded) {
+        loadMeteoProf(parseFloat(profEl.dataset.lat), parseFloat(profEl.dataset.lng));
+        profEl.dataset.loaded = '1';
+    }
+    setTimeout(() => { chartPron?.resize(); chartProf?.resize(); }, 30);
+}));
+
+// Botones panel meteo
+document.getElementById('btn-close-meteo').addEventListener('click', closeMeteoPanel);
+
+// Botón toolbar GFS: abre panel en el centro del mapa
+document.getElementById('btn-meteo').addEventListener('click', () => {
+    const c = map.getCenter();
+    openMeteoPanel(c.lat, c.lng);
+});
+
+// Shift+click en el mapa = abrir meteo en ese punto (no interfiere con click normal vector)
+map.on('click', e => {
+    if (e.originalEvent.shiftKey) {
+        e.preventDefault?.();
+        openMeteoPanel(e.lngLat.lat, e.lngLat.lng);
+    }
+});
+
+// Resize charts al cambiar tamaño ventana
+window.addEventListener('resize', () => { chartPron?.resize(); chartProf?.resize(); });
 
 // --- GO ---
 map.on('load', loadAll);
