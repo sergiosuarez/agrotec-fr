@@ -1,6 +1,6 @@
 # Guía del geovisor IDEPalma — Usuario final
 
-Cómo usar el visor web `https://agrotec.desarrollowebsite.com/visor/`.
+Cómo usar el visor web `https://idepalma.desarrollowebsite.com/visor/`.
 
 > Versión v2: capas categorizadas, popups vectoriales, panel meteorológico GFS interactivo, admin de visibilidad/orden, URL compartible.
 
@@ -146,7 +146,7 @@ También lista los NetCDF disponibles en el volumen GFS con su tamaño y fecha d
 
 ## Para administradores
 
-Para **agregar** nuevas capas al sistema, usar GeoNode admin (`https://agrotec.desarrollowebsite.com/`):
+Para **agregar** nuevas capas al sistema, usar GeoNode admin (`https://idepalma.desarrollowebsite.com/`):
 
 1. Subir el archivo (TIFF para raster, SHP/GPKG para vector) desde `Datasets → Cargar nuevo dataset`
 2. Asignar título y publicar
@@ -163,7 +163,7 @@ Para los ortomosaicos drone grandes (>500 MB), ver `bk/docs/INSTRUCTIVO_SUBIR_CA
 **El visor no carga**
 1. Refrescar con `Ctrl + Shift + R` (bypassea cache)
 2. Abrir consola del navegador (`F12 → Console`) y reportar errores al admin
-3. Verificar `https://agrotec.desarrollowebsite.com/health` → debe responder JSON con `status: ok`
+3. Verificar `https://idepalma.desarrollowebsite.com/health` → debe responder JSON con `status: ok`
 
 **Una capa nueva no aparece en el sidebar**
 1. Verificar en GeoNode admin que esté publicada (no en draft)

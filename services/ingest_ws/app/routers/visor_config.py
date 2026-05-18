@@ -31,8 +31,14 @@ def upsert_layer_config(payload: LayerConfigIn, db: Session = Depends(get_db)) -
     """
     cfg = db.query(VisorLayerConfig).filter_by(alternate=payload.alternate).first()
     if not cfg:
+        # Defaults explicitos: SQLAlchemy mapped_column default=True no se aplica
+        # confiable en INSERT cuando el atributo no se setea antes del flush.
         cfg = VisorLayerConfig(
             alternate=payload.alternate,
+            visible=True,
+            featured=False,
+            order=999,
+            default_opacity=1.0,
             updated_at=datetime.now(timezone.utc),
         )
         db.add(cfg)

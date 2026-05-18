@@ -4,6 +4,17 @@
 
 ---
 
+## Rebrand dominio — 2026-05-18 (tarde)
+
+- Dominio del sistema migrado de `agrotec.desarrollowebsite.com` → `idepalma.desarrollowebsite.com` (rename limpio, sin redirect).
+- Cert LE nuevo emitido vía `certbot --standalone` (downtime ~30 s del proxy). Cert viejo `agrotec.*` borrado.
+- nginx StreamTrack (`/opt/streamtrack/nginx/nginx.conf`) actualizado: server blocks 80+443 con el nuevo `server_name` y rutas de cert.
+- `.env` de ambos stacks (`bk/` GeoNode y `fr/` visor) actualizados: `SITEURL`, `ALLOWED_HOSTS`, `NGINX_BASE_URL`, `HTTP_HOST`, `GEOSERVER_WEB_UI_LOCATION`, `GEONODE_PUBLIC_*`, `GEONODE_HOST_HEADER`. Containers afectados recreados con `--force-recreate`.
+- Código: defaults de `services/ingest_ws/app/config.py` + URLs en `bk/scripts/{fix-nginx-proxy.sh,import_vectors.sh}` + todos los docs (README, VISOR_GUIA, API, DESPLIEGUE, CHANGELOG, INSTRUCTIVO_SUBIR_CAPAS) actualizados al nuevo dominio.
+- **Fix bug colateral en `visor_config.py`**: rows nuevas en `visor_layer_config` quedaban con `visible=False` porque el `default=True` de SQLAlchemy `mapped_column` no se aplicaba confiable en INSERT cuando el atributo no se seteaba antes del flush. Ahora se pasan defaults explícitos al constructor (`visible=True, featured=False, order=999, default_opacity=1.0`). Rows existentes que quedaron mal se corrigieron con `UPDATE visor_layer_config SET visible=TRUE WHERE visible IS NOT TRUE`.
+
+---
+
 ## v2 — 2026-05-18
 
 Reescritura del geovisor de Leaflet básico a MapLibre GL JS con panel meteorológico interactivo, admin de capas y workflow de carga de ortomosaicos drone optimizado.
@@ -41,6 +52,6 @@ Despliegue inicial:
 - Stack GeoNode 4.4.3 + GeoServer 2.24.4 + PostGIS 15 (`agrotec-bk`)
 - Stack FastAPI + PostGIS 16 + THREDDS + GFS scheduler (`agrotec-fr`)
 - Stack Mergin Maps community edition para sync QField (`agrotec-fr/mobile/`)
-- HTTPS por subdominio `agrotec.desarrollowebsite.com` con LE
+- HTTPS por subdominio `idepalma.desarrollowebsite.com` con LE
 - Wildcard DNS `*.desarrollowebsite.com → 167.86.111.196`
 - Visor MVP: 4 capas AP_TEMP cargadas, listado simple sin admin

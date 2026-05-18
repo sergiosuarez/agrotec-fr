@@ -6,8 +6,8 @@ Stack frontend de la plataforma **IDEPalma** (Infraestructura de Datos Espaciale
 - **API REST** (FastAPI) con catálogo unificado de capas + endpoints de meteorología puntual.
 - **Pipeline GFS**: scheduler cron interno descarga NOAA GFS cada 6 h y lo expone vía THREDDS (WMS/OPeNDAP) y endpoints REST de punto/perfil.
 
-> Vivo en: `https://agrotec.desarrollowebsite.com/visor/`
-> API: `https://agrotec.desarrollowebsite.com/docs`
+> Vivo en: `https://idepalma.desarrollowebsite.com/visor/`
+> API: `https://idepalma.desarrollowebsite.com/docs`
 
 ## Stack
 
@@ -83,7 +83,7 @@ docker compose ps
 curl http://localhost:8000/health
 
 # 4. Acceder via reverse proxy externo
-# https://agrotec.desarrollowebsite.com/visor/
+# https://idepalma.desarrollowebsite.com/visor/
 ```
 
 Detalle paso a paso en [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
@@ -91,7 +91,7 @@ Detalle paso a paso en [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 ## Variables de entorno clave
 
 - `GEONODE_INTERNAL_WFS_URL` — endpoint WFS de GeoServer dentro de la red Docker (ej. `http://nginx4agrotec:80/geoserver/wfs`)
-- `GEONODE_PUBLIC_BASE_URL` — URL pública (ej. `https://agrotec.desarrollowebsite.com`)
+- `GEONODE_PUBLIC_BASE_URL` — URL pública (ej. `https://idepalma.desarrollowebsite.com`)
 - `GEONODE_PUBLIC_WMS_URL` — derivada de la anterior (`…/geoserver/ows`)
 - `POSTGRES_*` — credenciales BD del visor (no del de GeoNode)
 - `GFS_DIR` — directorio compartido con `gfs_scheduler` donde caen los NetCDFs

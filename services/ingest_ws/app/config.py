@@ -19,11 +19,11 @@ class Settings(BaseSettings):
 
     # GeoNode (red interna)
     geonode_base_url: str = "http://nginx4agrotec:80"
-    geonode_public_base_url: str = "https://agrotec.desarrollowebsite.com"
-    geonode_public_wms_url: str = "https://agrotec.desarrollowebsite.com/geoserver/ows"
-    geonode_public_wfs_url: str = "https://agrotec.desarrollowebsite.com/geoserver/ows"
+    geonode_public_base_url: str = "https://idepalma.desarrollowebsite.com"
+    geonode_public_wms_url: str = "https://idepalma.desarrollowebsite.com/geoserver/ows"
+    geonode_public_wfs_url: str = "https://idepalma.desarrollowebsite.com/geoserver/ows"
     geonode_internal_wfs_url: str = "http://geoserver4agrotec:8080/geoserver/ows"
-    geonode_host_header: str = "agrotec.desarrollowebsite.com"
+    geonode_host_header: str = "idepalma.desarrollowebsite.com"
 
     # THREDDS / GFS
     thredds_url: str = "http://agrotec_thredds:8080"

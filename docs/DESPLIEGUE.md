@@ -157,7 +157,7 @@ Configuración propia de Agrotec (no depende de StreamTrack):
 
 ```bash
 cd /opt/agrotec/fr/nginx
-# Editar nginx.conf y reemplazar 'agrotec.desarrollowebsite.com' por tu dominio
+# Editar nginx.conf y reemplazar 'idepalma.desarrollowebsite.com' por tu dominio
 sed -i 's/agrotec\.desarrollowebsite\.com/agrotec.dominio.com/g' nginx.conf
 sed -i 's/mergin\.desarrollowebsite\.com/mergin.dominio.com/g' nginx.conf
 docker compose up -d

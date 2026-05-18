@@ -1,8 +1,8 @@
 # API REST — IDEPalma visor
 
-Base URL pública: `https://agrotec.desarrollowebsite.com/api/v1`
-Documentación interactiva (Swagger): `https://agrotec.desarrollowebsite.com/docs`
-OpenAPI JSON: `https://agrotec.desarrollowebsite.com/openapi.json`
+Base URL pública: `https://idepalma.desarrollowebsite.com/api/v1`
+Documentación interactiva (Swagger): `https://idepalma.desarrollowebsite.com/docs`
+OpenAPI JSON: `https://idepalma.desarrollowebsite.com/openapi.json`
 
 > Todas las respuestas son JSON. Los errores siguen el formato estándar de FastAPI: `{"detail": "mensaje"}` con HTTP 4xx/5xx.
 
