@@ -22,7 +22,8 @@
         /* --- SHELL: barra superior de pestañas + área de app --- */
         #shell { display: flex; flex-direction: column; height: 100vh; }
         #topbar { display: flex; align-items: stretch; background: var(--palmar-green-dark); color: #fff; flex: 0 0 50px; box-shadow: 0 2px 6px rgba(0,0,0,.2); z-index: 10; }
-        #topbar .brand { display: flex; align-items: center; gap: 8px; padding: 0 18px; font-weight: 700; font-size: 1.05rem; background: var(--palmar-green); white-space: nowrap; }
+        #topbar .brand { display: flex; align-items: center; padding: 0 14px; background: #fff; }
+        #topbar .brand-logo { height: 36px; width: auto; display: block; }
         #topbar .modes { display: flex; align-items: stretch; }
         .mode-tab { display: flex; align-items: center; gap: 6px; padding: 0 22px; cursor: pointer; font-size: .9rem; color: #ffffffcc; border-bottom: 3px solid transparent; user-select: none; }
         .mode-tab:hover { background: #ffffff14; }
@@ -116,6 +117,13 @@
         .opacity-row input[type="range"] { flex: 1; accent-color: var(--palmar-green); height: 4px; }
         .legend-row { background: white; padding: 4px 8px 6px 28px; margin-top: -4px; margin-bottom: 4px; border-radius: 0 0 4px 4px; }
         .legend-img { max-height: 160px; background: #fff; border: 1px solid var(--border); border-radius: 3px; padding: 2px; }
+        /* Leyenda horizontal custom (capas GFS) */
+        .legend-h { background: white; padding: 4px 10px 6px 28px; margin-top: -4px; margin-bottom: 4px; border-radius: 0 0 4px 4px; }
+        .legend-h-bar { width: 100%; height: 13px; display: block; border: 1px solid var(--border); border-radius: 2px; }
+        .legend-h-labels { display: flex; justify-content: space-between; font-size: .62rem; color: var(--muted); margin-top: 2px; }
+        .legend-h-labels span:last-child { font-weight: 600; color: var(--palmar-green-dark); }
+        /* Selector de mapa base en el mapa (toolbar) */
+        #toolbar select { background: white; border: 1px solid var(--border); border-radius: 3px; font-size: .78rem; padding: 5px 6px; color: var(--text); cursor: pointer; }
         /* Stepper temporal de capas GFS */
         .gfs-time-row { display: flex; align-items: center; gap: 6px; background: #eef5ec; border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; margin: 0 0 8px; }
         .gfs-time-btn { background: var(--palmar-green); color: white; border: none; width: 24px; height: 24px; border-radius: 3px; cursor: pointer; font-size: .8rem; line-height: 1; flex: 0 0 auto; }
@@ -207,7 +215,7 @@
 <body>
 <div id="shell">
     <div id="topbar">
-        <div class="brand">🌱 IDEPalma</div>
+        <div class="brand"><img class="brand-logo" src="https://idepalma.desarrollowebsite.com/uploaded/img/2026/05/encabezado.png" alt="IDEPalma"></div>
         <div class="modes">
             <div class="mode-tab active" data-mode="cartografia">🗺 Cartografía</div>
             <div class="mode-tab" data-mode="ortofoto">🛩 Ortofoto</div>
@@ -228,22 +236,11 @@
 
         <div id="sidebar-tabs">
             <div class="tab active" data-tab="layers">Capas</div>
-            <div class="tab" data-tab="basemap">Mapa base</div>
             <div class="tab" data-tab="status">Estado</div>
         </div>
 
         <div id="sidebar-content">
             <div id="tab-layers"><div class="loading">cargando capas…</div></div>
-            <div id="tab-basemap" style="display:none">
-                <div class="category">
-                    <h2>Mapa base</h2>
-                    <div class="layer-item"><input type="radio" name="basemap" id="bm-osm" value="osm" checked><label class="name" for="bm-osm">OpenStreetMap</label></div>
-                    <div class="layer-item"><input type="radio" name="basemap" id="bm-sat" value="esri-sat"><label class="name" for="bm-sat">Satélite (Esri)</label></div>
-                    <div class="layer-item"><input type="radio" name="basemap" id="bm-gsat" value="google-sat"><label class="name" for="bm-gsat">Satélite (Google)</label></div>
-                    <div class="layer-item"><input type="radio" name="basemap" id="bm-ghyb" value="google-hybrid"><label class="name" for="bm-ghyb">Híbrido (Google)</label></div>
-                    <div class="layer-item"><input type="radio" name="basemap" id="bm-light" value="cartolight"><label class="name" for="bm-light">Mapa claro (Carto)</label></div>
-                </div>
-            </div>
             <div id="tab-status" style="display:none">
                 <div class="category">
                     <h2>Servicios</h2>
@@ -289,7 +286,7 @@
         <!-- ===== Modo: Meteorología (capas GFS) ===== -->
         <div id="mode-meteorologia" class="mode-panel">
             <div class="mode-scroll">
-                <div class="mode-intro">Capas del modelo GFS (temperatura, viento, humedad, precipitación, radiación). Usa el control de tiempo para recorrer el pronóstico. Tip: Shift+clic en el mapa abre el pronóstico puntual.</div>
+                <div class="mode-intro">Capas del modelo GFS (temperatura, viento, humedad, precipitación, radiación). Usa el control de tiempo para recorrer el pronóstico. Tip: haz <b>clic en el mapa</b> para ver el pronóstico puntual.</div>
                 <div id="meteo-layers"><div class="loading">cargando…</div></div>
             </div>
         </div>
@@ -311,7 +308,13 @@
         <div class="ml-overlay" id="toolbar">
             <button id="btn-fit-all" title="Encuadrar capas activas">⊕ Fit</button>
             <button id="btn-reset" title="Restablecer vista">↻ Reset</button>
-            <button id="btn-meteo" title="Pronostico GFS en el centro del mapa">🌦 GFS</button>
+            <select id="basemap-select" title="Mapa base (disponible en todas las pestañas)">
+                <option value="osm">🗺 OpenStreetMap</option>
+                <option value="esri-sat">🛰 Satélite (Esri)</option>
+                <option value="google-sat">🛰 Satélite (Google)</option>
+                <option value="google-hybrid">🛰 Híbrido (Google)</option>
+                <option value="cartolight">⬜ Mapa claro (Carto)</option>
+            </select>
         </div>
         <div class="ml-overlay" id="coords">—</div>
 
@@ -570,38 +573,32 @@ function withCql(url, cql) { return url + '&CQL_FILTER=' + encodeURIComponent(cq
 
 // Selecciona una hacienda: filtra la capa de lotes por nombre_hcd y hace zoom a su bbox.
 // nombre = '' => muestra todas (sin filtro) y encuadra todas.
-function selectHacienda(nombre) {
-    selectedHacienda = nombre;
-    clearAutoRelated();   // quitar capas relacionadas de la hacienda anterior
+// La capa de lotes (Lotes Palmar) vive en TODAS las pestañas, filtrada por la hacienda
+// seleccionada en el selector global. Si nombre = '' muestra todos los lotes.
+function applyLotesFilter(nombre) {
     const layer = state.layers.find(l => l.alternate === HACIENDAS_ALT);
-    const setLotesTiles = (url) => {
-        const info = state.activeLayers[HACIENDAS_ALT];
-        const src = info && map.getSource(info.sourceId);
-        if (src && src.setTiles) src.setTiles([url]);
-    };
-    if (nombre) {
-        // 1) capa de lotes filtrada por la hacienda
-        if (layer) {
-            if (!state.activeLayers[HACIENDAS_ALT]) addWmsLayer(layer);
-            setLotesTiles(withCql(layer.wms_url, `nombre_hcd='${nombre.replace(/'/g, "''")}'`));
-        }
-        // 2) capas relacionadas SOLO vectoriales de esa hacienda (las ortofotos van en la pestaña Ortofoto)
-        relatedLayers(nombre).filter(l => l.subtype !== 'raster').forEach(l => {
-            if (!state.activeLayers[l.alternate]) { addWmsLayer(l); autoRelated.push(l.alternate); }
-        });
-        // 2b) dejar los vectores (lotes/límites) por encima de las ortofotos raster
-        [HACIENDAS_ALT, ...autoRelated].forEach(alt => {
-            const info = state.activeLayers[alt];
-            if (info && info.subtype === 'vector' && map.getLayer(info.sourceId)) map.moveLayer(info.sourceId);
-        });
-        // 3) zoom a la hacienda
-        const h = haciendas.find(x => x.nombre === nombre);
-        if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 60, maxZoom: 17 });
-    } else {
-        // "Todas": mostrar todos los lotes sin filtro
-        if (layer) { if (!state.activeLayers[HACIENDAS_ALT]) addWmsLayer(layer); setLotesTiles(layer.wms_url); }
-        fitHaciendasAll();
-    }
+    if (!layer) return;
+    if (!state.activeLayers[HACIENDAS_ALT]) addWmsLayer(layer);
+    const info = state.activeLayers[HACIENDAS_ALT];
+    const src = info && map.getSource(info.sourceId);
+    const url = nombre ? withCql(layer.wms_url, `nombre_hcd='${nombre.replace(/'/g, "''")}'`) : layer.wms_url;
+    if (src && src.setTiles) src.setTiles([url]);
+}
+
+// Capas vectoriales relacionadas de la hacienda (solo en Cartografía)
+function loadCartoVectors(nombre) {
+    if (!nombre) return;
+    relatedLayers(nombre).filter(l => l.subtype !== 'raster').forEach(l => {
+        if (!state.activeLayers[l.alternate]) { addWmsLayer(l); autoRelated.push(l.alternate); }
+    });
+}
+
+// Lotes (y vectores) por encima de ortofotos/meteo raster
+function bringLotesToTop() {
+    [HACIENDAS_ALT, ...autoRelated].forEach(alt => {
+        const info = state.activeLayers[alt];
+        if (info && map.getLayer(info.sourceId)) map.moveLayer(info.sourceId);
+    });
 }
 
 // --- Bootstrap: cargar capas + health + GFS ---
@@ -701,8 +698,19 @@ function renderLayerItem(l) {
             <button class="icon-btn fit-btn" data-alt="${l.alternate}" title="Zoom a capa">⊕</button>
         </div>
         ${active ? `<div class="opacity-row"><span>opacidad</span><input type="range" data-alt="${l.alternate}" min="0" max="100" value="${Math.round(opacity*100)}"></div>` : ''}
-        ${active && l.category === 'meteorologia' && l.legend_url ? `<div class="legend-row"><img class="legend-img" src="${l.legend_url}" alt="leyenda" loading="lazy"></div>` : ''}
+        ${active && l.category === 'meteorologia' && l.legend ? renderMeteoLegend(l) : ''}
     `;
+}
+
+// Leyenda HORIZONTAL custom para capas GFS: colorbar de ncWMS + etiquetas min/mid/max + unidad
+function renderMeteoLegend(l) {
+    const g = l.legend;
+    if (!g) return '';
+    const mid = Math.round((g.min + g.max) / 2 * 10) / 10;
+    return `<div class="legend-h">
+        <img class="legend-h-bar" src="${l.legend_url}" alt="escala de color" loading="lazy">
+        <div class="legend-h-labels"><span>${g.min}</span><span>${mid}</span><span>${g.max} ${g.unit}</span></div>
+    </div>`;
 }
 
 // --- WMS layer management ---
@@ -722,6 +730,8 @@ function addWmsLayer(layer) {
     state.activeLayers[layer.alternate] = { opacity: defaultOp, sourceId: id, subtype: layer.subtype };
     renderLayersTab();
     if (layer.alternate.startsWith('gfs:')) prefetchGfsNeighbors();
+    // los lotes (Lotes Palmar) van por encima de ortofotos/meteo en todas las pestañas
+    if (layer.alternate !== HACIENDAS_ALT && state.activeLayers[HACIENDAS_ALT]) bringLotesToTop();
     setTimeout(updateUrlState, 50);
 }
 
@@ -789,10 +799,13 @@ function changeBasemap(key) {
         newStyle.layers.push({ id: info.sourceId, type: 'raster', source: info.sourceId, paint: { 'raster-opacity': info.opacity } });
     });
     map.setStyle(newStyle);
+    // tras recargar el estilo: re-aplicar el filtro de hacienda a los lotes y subirlos arriba
+    map.once('idle', () => { applyLotesFilter(selectedHacienda); bringLotesToTop(); });
 }
 
 // --- Click en mapa: probar TODAS las capas vectoriales activas, mostrar popup con la primera que tenga feature ---
 map.on('click', async e => {
+    if (currentMode === 'meteorologia') return;   // en Meteorología, el clic abre el pronóstico (no popup de lote)
     const vectorLayers = Object.entries(state.activeLayers).filter(([_, i]) => i.subtype === 'vector');
     if (vectorLayers.length === 0) return;
     const lat = e.lngLat.lat, lng = e.lngLat.lng;
@@ -843,13 +856,13 @@ async function loadGFS() {
 // --- Tabs ---
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-    ['layers', 'basemap', 'status'].forEach(name => {
+    ['layers', 'status'].forEach(name => {
         document.getElementById('tab-' + name).style.display = (name === t.dataset.tab) ? '' : 'none';
     });
 }));
 
-// --- Basemap radios ---
-document.querySelectorAll('input[name="basemap"]').forEach(r => r.addEventListener('change', e => changeBasemap(e.target.value)));
+// --- Selector de mapa base (en el mapa, disponible en todas las pestañas) ---
+document.getElementById('basemap-select').addEventListener('change', e => changeBasemap(e.target.value));
 
 // --- Search ---
 document.getElementById('search-input').addEventListener('input', renderLayersTab);
@@ -1201,18 +1214,9 @@ document.getElementById('sidebar-toggle').addEventListener('click', () => {
 // Botones panel meteo
 document.getElementById('btn-close-meteo').addEventListener('click', closeMeteoPanel);
 
-// Botón toolbar GFS: abre panel en el centro del mapa
-document.getElementById('btn-meteo').addEventListener('click', () => {
-    const c = map.getCenter();
-    openMeteoPanel(c.lat, c.lng);
-});
-
-// Shift+click en el mapa = abrir meteo en ese punto (no interfiere con click normal vector)
+// Clic en el mapa SOLO en la pestaña Meteorología = abrir el pronóstico puntual ahí
 map.on('click', e => {
-    if (e.originalEvent.shiftKey) {
-        e.preventDefault?.();
-        openMeteoPanel(e.lngLat.lat, e.lngLat.lng);
-    }
+    if (currentMode === 'meteorologia') openMeteoPanel(e.lngLat.lat, e.lngLat.lng);
 });
 
 // Resize charts al cambiar tamaño ventana
@@ -1228,6 +1232,7 @@ const MODES = ['cartografia', 'ortofoto', 'multiespectral', 'meteorologia'];
 function setMode(mode) {
     if (mode === currentMode) return;
     removeTabLayers(currentMode);              // retira las capas de la pestaña que dejamos
+    if (currentMode === 'meteorologia') closeMeteoPanel();   // el pronóstico solo vive en Meteorología
     currentMode = mode;
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
     MODES.forEach(m => document.getElementById('mode-' + m).classList.toggle('active', m === mode));
@@ -1244,18 +1249,19 @@ document.getElementById('global-hacienda').addEventListener('change', e => {
 
 function applyHaciendaToActiveTab() {
     const nombre = selectedHacienda;
-    if (currentMode === 'cartografia') selectHacienda(nombre);
+    clearAutoRelated();                 // limpia vectores de la hacienda anterior
+    applyLotesFilter(nombre);           // lotes en TODAS las pestañas, filtrado
+    if (currentMode === 'cartografia') loadCartoVectors(nombre);
     else if (currentMode === 'ortofoto') showOrtoForHacienda(nombre);
-    else {  // meteorologia / multiespectral: solo encuadrar
-        const h = haciendas.find(x => x.nombre === nombre);
-        if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 60, maxZoom: 16 });
-        else fitHaciendasAll();
-    }
+    const h = haciendas.find(x => x.nombre === nombre);
+    if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: currentMode === 'ortofoto' ? 50 : 60, maxZoom: currentMode === 'ortofoto' ? 18 : 16 });
+    else fitHaciendasAll();
+    bringLotesToTop();
 }
 
-// Retira las capas que pertenecen a una pestaña (al salir de ella)
+// Retira las capas de una pestaña al salir de ella. Los LOTES NO se quitan (van en todas).
 function removeTabLayers(mode) {
-    if (mode === 'cartografia') { if (state.activeLayers[HACIENDAS_ALT]) removeWmsLayer(HACIENDAS_ALT); clearAutoRelated(); }
+    if (mode === 'cartografia') clearAutoRelated();
     else if (mode === 'ortofoto') clearOrtoShown();
     else if (mode === 'meteorologia') Object.keys(state.activeLayers).filter(a => a.startsWith('gfs:')).forEach(a => removeWmsLayer(a));
 }

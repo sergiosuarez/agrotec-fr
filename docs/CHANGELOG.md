@@ -4,6 +4,17 @@
 
 ---
 
+## Pulido pestaña Meteorología + UX global — 2026-05-31
+
+- **Logo IDEPalma** en el topbar (reemplaza el "🌱 IDEPalma" de texto): imagen `encabezado.png` sobre fondo blanco.
+- **Lotes (Lotes Palmar) en TODAS las pestañas**: la capa de lotes ya no es exclusiva de Cartografía; persiste en Ortofoto/Meteo/Multiespectral filtrada por la hacienda global, y se mantiene por encima (`bringLotesToTop`) de ortofotos/meteo. `removeTabLayers` ya no la quita. Helpers `applyLotesFilter`/`loadCartoVectors` (reemplazan `selectHacienda`).
+- **Selector de mapa base en el mapa** (toolbar): un `<select>` disponible en cualquier pestaña; salió de la sub-pestaña "Mapa base" de Cartografía (que se eliminó). `changeBasemap` re-aplica el filtro de hacienda + z-order tras recargar el estilo.
+- **Botón 🌦 GFS eliminado**; el **panel de pronóstico** ahora aparece SOLO en Meteorología (clic en el mapa en esa pestaña lo abre; al salir de Meteo se cierra). En otras pestañas el clic no lo abre.
+- **Vectores de viento 2× más grandes**: el layer GFS de viento se renderiza a 256px (ncWMS dibuja al tamaño del canvas; MapLibre reescala) → flechas más visibles, con color de magnitud apreciable. Siguen dimensionadas por magnitud (`colored_sized_arrows`).
+- **Leyendas horizontales custom** para capas GFS: colorbar horizontal de ncWMS (`colorbaronly=true&vertical=false`) + etiquetas min/mid/max + unidad puestas por el visor (`renderMeteoLegend`), en lugar de la imagen vertical de THREDDS. Temp en °C (15–33), viento 0–15 m/s, HR 0–100 %, precip 0–4 mm/h, radiación 0–1100 W/m². Metadata `legend` en `gfs_layers.py` → API.
+
+---
+
 ## Fix: perfil vertical GFS fallaba (HDF5 no thread-safe) — 2026-05-31
 
 El perfil vertical en la pestaña Meteorología tiraba "Error: Unexpected token 'I'… is not valid JSON": `/api/v1/gfs/profile` devolvía un 500 en texto plano (`AttributeError: NetCDF: Can't open HDF5 attribute`). Causa: los endpoints GFS son `def` (sync) → FastAPI los corre en un threadpool → varios hilos abrían el mismo NetCDF a la vez, y netCDF4/HDF5 NO es thread-safe.

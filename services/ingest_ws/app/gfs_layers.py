@@ -28,35 +28,44 @@ _DEFAULT_BBOX = [-80.0, -5.0, -78.0, 1.0]
 
 # Definicion de las capas meteo. order arranca en 700 para que queden al final
 # del sidebar (debajo de ortomosaicos/vectoriales) salvo override del admin.
+# Definicion de las capas meteo. `legend` = etiquetas que mostramos (min/mid/max + unidad),
+# pueden diferir del colorscalerange WMS (ej. temp en K en el WMS pero °C en la leyenda).
+# `tile_px` < 512 agranda los glifos (ncWMS dibuja al tamaño del canvas; MapLibre reescala).
 GFS_LAYERS: list[dict] = [
     {
         "var": "t2m", "title": "Temperatura 2 m", "style": "raster",
         "palette": "div-RdYlBu-inv", "colorscalerange": "288,306",
         "units": "K", "order": 700,
+        "legend": {"min": 15, "max": 33, "unit": "°C"},
         "abstract": "Temperatura del aire a 2 m (GFS). Escala 15–33 °C.",
     },
     {
         "var": "u10:v10-group", "title": "Viento 10 m (vectores)",
         "style": "colored_sized_arrows", "palette": "seq-YlGnBu",
         "colorscalerange": "0,15", "units": "m/s", "order": 701,
-        "abstract": "Viento a 10 m: flechas de direccion coloreadas y dimensionadas por magnitud, fondo transparente (GFS).",
+        "tile_px": 256,   # flechas ~2x mas grandes (mas visibles)
+        "legend": {"min": 0, "max": 15, "unit": "m/s"},
+        "abstract": "Viento a 10 m: flechas dimensionadas y coloreadas por magnitud (tamaño ∝ velocidad). Fondo transparente (GFS).",
     },
     {
         "var": "r2", "title": "Humedad relativa 2 m", "style": "raster",
         "palette": "seq-Blues", "colorscalerange": "0,100",
         "units": "%", "order": 702,
+        "legend": {"min": 0, "max": 100, "unit": "%"},
         "abstract": "Humedad relativa a 2 m (GFS).",
     },
     {
         "var": "prate", "title": "Precipitacion", "style": "raster",
         "palette": "seq-PuBu", "colorscalerange": "0,0.0011",
         "units": "kg m-2 s-1", "order": 703,
+        "legend": {"min": 0, "max": 4, "unit": "mm/h"},
         "abstract": "Tasa de precipitacion (GFS). Escala 0–~4 mm/h.",
     },
     {
         "var": "sdswrf", "title": "Radiacion solar", "style": "raster",
         "palette": "seq-Heat", "colorscalerange": "0,1100",
         "units": "W/m2", "order": 704,
+        "legend": {"min": 0, "max": 1100, "unit": "W/m²"},
         "abstract": "Radiacion solar de onda corta en superficie (GFS).",
     },
 ]
@@ -73,6 +82,7 @@ def alternate_for(var: str) -> str:
 
 def _getmap_url(layer: dict) -> str:
     """URL WMS GetMap con placeholder {bbox-epsg-3857} para MapLibre (raster tiles)."""
+    px = layer.get("tile_px", 512)
     return (
         f"{_wms_base()}"
         f"?service=WMS&version=1.1.1&request=GetMap"
@@ -81,19 +91,19 @@ def _getmap_url(layer: dict) -> str:
         f"&colorscalerange={layer['colorscalerange']}"
         f"&numcolorbands=100&abovemaxcolor=extend&belowmincolor=extend"
         f"&format=image/png&transparent=true"
-        f"&srs=EPSG:3857&bbox={{bbox-epsg-3857}}&width=512&height=512"
+        f"&srs=EPSG:3857&bbox={{bbox-epsg-3857}}&width={px}&height={px}"
     )
 
 
-def _legend_url(layer: dict) -> str:
-    """URL GetLegendGraphic de ncWMS (colorbar vertical con la escala de la capa)."""
+def _legend_bar_url(layer: dict) -> str:
+    """Colorbar HORIZONTAL solo (sin etiquetas de ncWMS); las etiquetas las pone el visor."""
     return (
         f"{_wms_base()}"
         f"?request=GetLegendGraphic"
         f"&layer={layer['var']}"
         f"&palette={layer['palette']}"
         f"&colorscalerange={layer['colorscalerange']}"
-        f"&numcolorbands=100&vertical=true&width=55&height=160"
+        f"&numcolorbands=100&colorbaronly=true&vertical=false&width=200&height=16"
     )
 
 
@@ -137,7 +147,8 @@ def gfs_layer_entries() -> list[dict]:
             "subtype": "raster",
             "category": "meteorologia",
             "wms_url": _getmap_url(lyr),
-            "legend_url": _legend_url(lyr),
+            "legend_url": _legend_bar_url(lyr),   # colorbar horizontal (el visor agrega etiquetas)
+            "legend": lyr.get("legend"),          # {min, max, unit} para las etiquetas
             "thumbnail_url": None,
             "bbox": bbox,
             "default_order": lyr["order"],

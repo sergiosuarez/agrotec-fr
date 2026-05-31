@@ -35,6 +35,7 @@ class LayerOut(BaseModel):
     category: str                           # "ortomosaicos" | "vectoriales" | "otros"
     wms_url: str
     legend_url: str | None = None
+    legend: dict | None = None              # {min, max, unit} para leyenda custom (capas GFS)
     thumbnail_url: str | None = None
     bbox: list[float] | None = None         # [minx, miny, maxx, maxy] en WGS84
     # Config local del visor (puede ser None si no esta configurada)
@@ -163,6 +164,7 @@ async def list_layers(
             category=e["category"],
             wms_url=e["wms_url"],
             legend_url=e["legend_url"],
+            legend=e.get("legend"),
             thumbnail_url=e["thumbnail_url"],
             bbox=e["bbox"],
             visible=visible,
