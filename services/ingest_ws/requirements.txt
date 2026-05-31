@@ -15,6 +15,9 @@ pandas~=3.0
 xarray~=2026.4
 netCDF4~=1.7
 
+# Compresor de ortofotos a COG-JPEG (rasterio trae GDAL en el wheel binario)
+rio-cogeo>=5,<6
+python-multipart>=0.0.12
+
 # Para offline bundles (Tarea futura: MBTiles desde COG)
-# rasterio~=1.4
 # rio-tiler~=7.0

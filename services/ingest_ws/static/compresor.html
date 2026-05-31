@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IDEPalma — Compresor de ortofotos</title>
+<style>
+    :root { --palmar-green:#1B7A40; --palmar-green-dark:#155a30; --palmar-red:#E32630; --bg:#f1f5f0; --border:#c8d4c5; --muted:#666; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:#1a1a1a; }
+    header { background:var(--palmar-green); color:#fff; padding:14px 20px; display:flex; align-items:center; gap:12px; }
+    header h1 { margin:0; font-size:1.15rem; font-weight:600; }
+    header .sub { font-size:.78rem; opacity:.85; }
+    header a { margin-left:auto; color:#fff; font-size:.8rem; text-decoration:none; border:1px solid #ffffff66; padding:5px 10px; border-radius:4px; }
+    header a:hover { background:#ffffff22; }
+    main { max-width:680px; margin:24px auto; padding:0 16px; }
+    .card { background:#fff; border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:16px; }
+    .intro { font-size:.9rem; color:#333; line-height:1.5; }
+    .intro b { color:var(--palmar-green-dark); }
+    label { display:block; font-size:.8rem; font-weight:600; color:var(--palmar-green-dark); margin:14px 0 6px; }
+    input[type=file] { width:100%; padding:10px; border:1px dashed var(--palmar-green); border-radius:6px; background:#fafffa; cursor:pointer; }
+    .q-row { display:flex; align-items:center; gap:10px; }
+    .q-row input[type=range] { flex:1; accent-color:var(--palmar-green); }
+    .q-val { font-weight:600; color:var(--palmar-green-dark); min-width:34px; text-align:right; }
+    .hint { font-size:.72rem; color:var(--muted); margin-top:4px; }
+    button.go { margin-top:16px; width:100%; background:var(--palmar-green); color:#fff; border:none; padding:12px; border-radius:6px; font-size:.95rem; font-weight:600; cursor:pointer; }
+    button.go:hover { background:var(--palmar-green-dark); }
+    button.go:disabled { background:#b9c7b6; cursor:default; }
+    .progress { height:10px; background:#e3ebe1; border-radius:6px; overflow:hidden; margin-top:6px; }
+    .progress > div { height:100%; width:0; background:var(--palmar-green); transition:width .2s; }
+    #panel { display:none; }
+    .stat { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #eee; font-size:.85rem; }
+    .stat b { color:var(--palmar-green-dark); }
+    .badge { display:inline-block; padding:2px 10px; border-radius:10px; font-size:.75rem; font-weight:600; }
+    .badge.run { background:#fff3cd; color:#856404; }
+    .badge.done { background:#c8e6c9; color:var(--palmar-green-dark); }
+    .badge.err { background:#ffcdd2; color:#b71c1c; }
+    a.dl { display:block; text-align:center; margin-top:14px; background:var(--palmar-green); color:#fff; padding:12px; border-radius:6px; text-decoration:none; font-weight:600; }
+    a.dl:hover { background:var(--palmar-green-dark); }
+    .err-msg { color:#b71c1c; font-size:.8rem; margin-top:8px; word-break:break-word; }
+    .note { font-size:.72rem; color:var(--muted); margin-top:10px; line-height:1.5; }
+</style>
+</head>
+<body>
+<header>
+    <div>
+        <h1>🗜 IDEPalma — Compresor de ortofotos</h1>
+        <div class="sub">GeoTIFF → COG-JPEG (Cloud Optimized) — más liviano, sin pérdida visual</div>
+    </div>
+    <a href="/visor/">← Volver al visor</a>
+</header>
+
+<main>
+    <div class="card intro">
+        Convierte un ortomosaico GeoTIFF pesado a <b>COG con compresión JPEG + overviews</b>.
+        Reduce típicamente <b>10–20×</b> (p.ej. 3 GB → ~200 MB) manteniendo la calidad visual.
+        Luego subes el COG resultante por GeoNode. Soporta RGB y RGBA (el alfa pasa a máscara interna).
+    </div>
+
+    <div class="card">
+        <label for="file">1. Selecciona el GeoTIFF (.tif / .tiff)</label>
+        <input type="file" id="file" accept=".tif,.tiff,image/tiff">
+
+        <label for="q">2. Calidad JPEG</label>
+        <div class="q-row">
+            <input type="range" id="q" min="60" max="100" value="90">
+            <span class="q-val" id="qv">90</span>
+        </div>
+        <div class="hint">90 = visualmente idéntico (recomendado). Más alto = mayor calidad y tamaño.</div>
+
+        <button class="go" id="go" disabled>Comprimir</button>
+        <div class="progress" id="upbar-wrap" style="display:none"><div id="upbar"></div></div>
+        <div class="note">
+            Archivos muy grandes (varios GB) pueden tardar en subir según tu ancho de banda.
+            No cierres la pestaña durante la subida; la compresión sigue en el servidor y puedes volver a consultarla.
+        </div>
+    </div>
+
+    <div class="card" id="panel">
+        <div class="stat"><span>Estado</span><span id="st-badge"></span></div>
+        <div class="stat"><span>Archivo</span><b id="st-file">—</b></div>
+        <div class="stat"><span>Tamaño original</span><b id="st-in">—</b></div>
+        <div class="stat"><span>Tamaño comprimido</span><b id="st-out">—</b></div>
+        <div class="stat"><span>Reducción</span><b id="st-ratio">—</b></div>
+        <div class="err-msg" id="st-err"></div>
+        <a class="dl" id="dl" style="display:none">⬇ Descargar COG</a>
+    </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = b => b == null ? '—' : (b > 1e9 ? (b/1e9).toFixed(2)+' GB' : b > 1e6 ? (b/1e6).toFixed(1)+' MB' : (b/1e3).toFixed(0)+' KB');
+let pollTimer = null;
+
+$('q').addEventListener('input', e => $('qv').textContent = e.target.value);
+$('file').addEventListener('change', () => $('go').disabled = !$('file').files.length);
+
+$('go').addEventListener('click', () => {
+    const f = $('file').files[0];
+    if (!f) return;
+    $('go').disabled = true;
+    $('upbar-wrap').style.display = 'block';
+    $('panel').style.display = 'block';
+    $('dl').style.display = 'none';
+    $('st-err').textContent = '';
+    setBadge('run', 'subiendo…');
+    $('st-file').textContent = f.name;
+    $('st-in').textContent = fmt(f.size);
+    $('st-out').textContent = '—'; $('st-ratio').textContent = '—';
+
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('quality', $('q').value);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/v1/compress');
+    xhr.upload.onprogress = e => { if (e.lengthComputable) $('upbar').style.width = (100*e.loaded/e.total).toFixed(1)+'%'; };
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            const { job_id } = JSON.parse(xhr.responseText);
+            setBadge('run', 'comprimiendo…');
+            poll(job_id);
+        } else {
+            setBadge('err', 'error');
+            $('st-err').textContent = 'Error al subir: ' + xhr.status + ' ' + xhr.responseText;
+            $('go').disabled = false;
+        }
+    };
+    xhr.onerror = () => { setBadge('err','error'); $('st-err').textContent='Error de red al subir.'; $('go').disabled=false; };
+    xhr.send(fd);
+});
+
+function setBadge(cls, txt) { $('st-badge').innerHTML = `<span class="badge ${cls}">${txt}</span>`; }
+
+function poll(jid) {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+        try {
+            const r = await fetch('/api/v1/compress/' + jid);
+            const d = await r.json();
+            if (d.state === 'running' || d.state === 'queued') { setBadge('run','comprimiendo…'); return; }
+            if (d.state === 'done') {
+                clearInterval(pollTimer);
+                setBadge('done', 'listo');
+                $('st-in').textContent = fmt(d.in_bytes);
+                $('st-out').textContent = fmt(d.out_bytes);
+                $('st-ratio').textContent = d.ratio ? (d.ratio + '× más chico') : '—';
+                $('dl').href = '/api/v1/compress/' + jid + '/download';
+                $('dl').style.display = 'block';
+                $('go').disabled = false;
+            } else if (d.state === 'error') {
+                clearInterval(pollTimer);
+                setBadge('err', 'error');
+                $('st-err').textContent = d.error || 'falló la compresión';
+                $('go').disabled = false;
+            }
+        } catch (e) { /* reintenta en el próximo tick */ }
+    }, 2500);
+}
+</script>
+</body>
+</html>

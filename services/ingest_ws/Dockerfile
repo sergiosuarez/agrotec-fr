@@ -5,6 +5,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl libpq5 ca-certificates \
         libnetcdf22 libhdf5-310 \
+        libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

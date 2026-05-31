@@ -4,6 +4,31 @@
 
 ---
 
+## Compresor de ortofotos a COG-JPEG — 2026-05-31
+
+Servicio dentro del visor para comprimir ortomosaicos GeoTIFF pesados a COG-JPEG (lo que antes se hacía manual con GlobalMapper). Habilita cargar ortofotos grandes por GeoNode sin subir los 3 GB originales.
+
+### Backend
+
+- **`rio-cogeo` + `python-multipart`** agregados a requirements (rasterio trae GDAL en el wheel; el Dockerfile suma `libexpat1` que el wheel necesita en runtime).
+- **Nuevo `app/routers/compresor.py`**: diseño con job en background para soportar archivos grandes sin colgar el request.
+  - `POST /api/v1/compress` (multipart, `quality` 60–100, def 90) → streaming a disco + encola compresión → `{job_id}`.
+  - `GET /api/v1/compress/{job_id}` → estado (uploading/queued/running/done/error + tamaños y ratio). Estado en JSON por job (compartido entre workers).
+  - `GET /api/v1/compress/{job_id}/download` → descarga el COG.
+  - `cog_translate` perfil JPEG q90, blocksize 512, overviews (average). RGBA → RGB + máscara interna (JPEG no soporta alfa). Borra el original tras comprimir; limpia jobs >24h.
+- **`main.py`**: registra el router + ruta `GET /compresor` (página).
+
+### Frontend
+
+- **Nueva página `static/compresor.html`** (servida en `/visor/compresor`): subir GeoTIFF, slider de calidad, barra de progreso de subida (XHR), polling de estado, muestra ratio y botón de descarga. Branding IDEPalma.
+
+### Verificado
+
+- TIFF 27 MB (RGB ruido) → COG 2.2 MB (12.3×, y el ruido comprime mal; orthos reales rinden más). Salida: YCbCr JPEG, tiled 512, 3 overviews, EPSG 32717 preservado, COG válido.
+- Nota: subir varios GB por navegador depende del ancho de banda (puede tardar). El nginx de idepalma ya permite hasta 10 GB (`client_max_body_size`). Para archivos enormes, alternativa futura: dejar el TIFF en una carpeta del servidor vía SFTP y comprimir server-side.
+
+---
+
 ## Cartografía agrícola: selector de hacienda + zoom inicial — 2026-05-31
 
 Primera fase del rediseño hacia un visor por haciendas (visión del Ing.: pestañas Cartografía / Ortofoto / Multiespectral). Esta entrega cubre la navegación por hacienda en la capa de lotes.

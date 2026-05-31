@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .routers import (
+    compresor,
     cultivos,
     feature_info,
     gfs,
@@ -49,6 +50,7 @@ app.include_router(gfs.router)
 app.include_router(layers.router)
 app.include_router(visor_config.router)
 app.include_router(feature_info.router)
+app.include_router(compresor.router)
 
 # Geovisor web (static) — sirve /static/* y / (index.html)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -57,3 +59,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/", include_in_schema=False)
 def root() -> FileResponse:
     return FileResponse("static/index.html")
+
+
+@app.get("/compresor", include_in_schema=False)
+def compresor_page() -> FileResponse:
+    return FileResponse("static/compresor.html")
