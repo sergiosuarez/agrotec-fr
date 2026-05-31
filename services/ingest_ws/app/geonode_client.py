@@ -17,7 +17,7 @@ class GeoNodeClient:
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
-            timeout=10,
+            timeout=30,
             follow_redirects=True,
             headers={"Host": self._host},
         )

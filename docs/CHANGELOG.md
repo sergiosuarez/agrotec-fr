@@ -4,6 +4,17 @@
 
 ---
 
+## Fix: visor no cargaba tras subir 27 shapefiles (GeoNode saturado) — 2026-06-01
+
+Tras subir 27 shapefiles a la vez, el visor mostraba "Unexpected token 'I'… is not valid JSON": `/api/v1/layers` daba 500. Causas y fixes:
+- **GeoNode (uWSGI) se trabó** con las subidas concurrentes (el límite de subida en paralelo está en 150). Se reinició `django4agrotec` + `nginx4agrotec` (este último cacheaba la IP vieja del upstream `django`).
+- **Timeout del cliente GeoNode 10s → 30s** (`geonode_client`): la serialización de 40+ datasets en `/api/v2/datasets?page_size=200` tarda ~12s y superaba los 10s → timeout → 500.
+- **Caché + resiliencia en `/api/v1/layers`**: se cachea el último listado bueno por 120s (cargas repetidas instantáneas, ~0.08s vs ~12s) y, si GeoNode se cuelga, se sirve el último-bueno (+ las capas GFS) en vez de tirar 500. El visor ya no se rompe entero por un hipo de GeoNode.
+
+Nota operativa: subir muchos shapefiles de golpe satura los workers uWSGI de GeoNode; conviene en lotes más chicos.
+
+---
+
 ## Selector basado en haciendas_totales (26 límites reales) — 2026-05-31
 
 Llegaron los shapefiles reales de haciendas: `haciendas_totales` (26 polígonos de límite, columnas `nombre` + `nombre_hcd`=código `HCDA_*`) + un `hcda_<x>` por hacienda. El selector global pasa a usar esta capa autoritativa (antes derivaba 22 del atributo `nombre_hcd` de los lotes).

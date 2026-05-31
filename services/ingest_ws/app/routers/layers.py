@@ -22,6 +22,14 @@ from ..models import VisorLayerConfig
 
 router = APIRouter(prefix="/api/v1/layers", tags=["layers"])
 
+# Caché del listado de datasets de GeoNode: su API es lenta (~12s con 40+ capas), así que
+# servimos el último listado por _CACHE_TTL s (cargas repetidas instantáneas) y refrescamos
+# solo al expirar. Tambien sirve de fallback si GeoNode se cuelga/timeout.
+import time as _time
+
+_datasets_cache: dict = {"data": None, "ts": 0.0}
+_CACHE_TTL = 120  # segundos
+
 
 class LayerOut(BaseModel):
     """Capa lista para consumir desde el geovisor."""
@@ -117,7 +125,17 @@ async def list_layers(
     Por defecto omite las que tienen `visible=False` en visor_layer_config (que el admin
     marco como ocultas). Con `include_hidden=true` las incluye (para el modal admin).
     """
-    datasets = await geonode.list_datasets(page_size=200)
+    # Caché fresca → respuesta instantánea (evita los ~12s del API de GeoNode en cada carga).
+    fresh = _datasets_cache["data"] is not None and (_time.time() - _datasets_cache["ts"]) < _CACHE_TTL
+    if fresh:
+        datasets = _datasets_cache["data"]
+    else:
+        try:
+            datasets = await geonode.list_datasets(page_size=200)
+            _datasets_cache["data"] = datasets
+            _datasets_cache["ts"] = _time.time()
+        except Exception:
+            datasets = _datasets_cache.get("data") or []   # GeoNode caído: último-bueno
     # Indice de config local por alternate
     config_idx = {c.alternate: c for c in db.query(VisorLayerConfig).all()}
 
