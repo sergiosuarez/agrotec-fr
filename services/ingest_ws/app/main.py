@@ -56,11 +56,16 @@ app.include_router(compresor.router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+# no-cache: el navegador revalida siempre (con ETag) y toma la última versión del
+# visor tras cada deploy, sin quedarse con un index.html viejo cacheado.
+_NOCACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/", include_in_schema=False)
 def root() -> FileResponse:
-    return FileResponse("static/index.html")
+    return FileResponse("static/index.html", headers=_NOCACHE)
 
 
 @app.get("/compresor", include_in_schema=False)
 def compresor_page() -> FileResponse:
-    return FileResponse("static/compresor.html")
+    return FileResponse("static/compresor.html", headers=_NOCACHE)
