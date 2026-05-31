@@ -74,6 +74,8 @@
 
         .opacity-row { display: flex; align-items: center; gap: 6px; font-size: .7rem; color: var(--muted); padding: 4px 8px 4px 28px; background: white; margin-top: -4px; margin-bottom: 4px; border-radius: 0 0 4px 4px; }
         .opacity-row input[type="range"] { flex: 1; accent-color: var(--palmar-green); height: 4px; }
+        .legend-row { background: white; padding: 4px 8px 6px 28px; margin-top: -4px; margin-bottom: 4px; border-radius: 0 0 4px 4px; }
+        .legend-img { max-height: 160px; background: #fff; border: 1px solid var(--border); border-radius: 3px; padding: 2px; }
 
         .status-row { display: flex; gap: 6px; font-size: .7rem; padding: 6px 0; }
         .badge { display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: .65rem; font-weight: 600; }
@@ -325,7 +327,7 @@ function renderLayersTab() {
     const byCat = {};
     filtered.forEach(l => (byCat[l.category] ||= []).push(l));
 
-    const CAT_LABELS = { ortomosaicos: '🛩 Ortomosaicos drone', haciendas: '🌾 Haciendas y lotes', vectoriales: '📐 Vectoriales', limites: '🗺 Límites administrativos', infraestructura: '🛣 Infraestructura', raster_otros: '🖼 Otros rasters', otros: '📦 Otros' };
+    const CAT_LABELS = { meteorologia: '🌦 Meteorología GFS', ortomosaicos: '🛩 Ortomosaicos drone', haciendas: '🌾 Haciendas y lotes', vectoriales: '📐 Vectoriales', limites: '🗺 Límites administrativos', infraestructura: '🛣 Infraestructura', raster_otros: '🖼 Otros rasters', otros: '📦 Otros' };
 
     const html = Object.entries(byCat).map(([cat, items]) => {
         const collapsed = state.collapsedCats?.[cat] ? 'collapsed' : '';
@@ -391,6 +393,7 @@ function renderLayerItem(l) {
             <button class="icon-btn fit-btn" data-alt="${l.alternate}" title="Zoom a capa">⊕</button>
         </div>
         ${active ? `<div class="opacity-row"><span>opacidad</span><input type="range" data-alt="${l.alternate}" min="0" max="100" value="${Math.round(opacity*100)}"></div>` : ''}
+        ${active && l.category === 'meteorologia' && l.legend_url ? `<div class="legend-row"><img class="legend-img" src="${l.legend_url}" alt="leyenda" loading="lazy"></div>` : ''}
     `;
 }
 

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
 from ..geonode_client import geonode
+from ..gfs_layers import gfs_layer_entries
 from ..models import VisorLayerConfig
 
 router = APIRouter(prefix="/api/v1/layers", tags=["layers"])
@@ -142,6 +143,30 @@ async def list_layers(
             featured=bool(cfg.featured) if cfg else False,
             order=cfg.order if cfg else 999,
             default_opacity=float(cfg.default_opacity) if cfg else 1.0,
+            color=cfg.color if cfg else None,
+        ))
+
+    # Capas meteo GFS (servidas por THREDDS/ncWMS), con la misma logica de
+    # VisorLayerConfig que las de GeoNode. Su orden por defecto va en cada entry.
+    for e in gfs_layer_entries():
+        cfg = config_idx.get(e["alternate"])
+        visible = bool(cfg.visible) if cfg else True
+        if not visible and not include_hidden:
+            continue
+        out.append(LayerOut(
+            alternate=e["alternate"],
+            title=e["title"],
+            abstract=e["abstract"],
+            subtype=e["subtype"],
+            category=e["category"],
+            wms_url=e["wms_url"],
+            legend_url=e["legend_url"],
+            thumbnail_url=e["thumbnail_url"],
+            bbox=e["bbox"],
+            visible=visible,
+            featured=bool(cfg.featured) if cfg else False,
+            order=cfg.order if cfg else e["default_order"],
+            default_opacity=float(cfg.default_opacity) if cfg else 0.75,
             color=cfg.color if cfg else None,
         ))
 

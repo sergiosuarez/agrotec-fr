@@ -4,6 +4,34 @@
 
 ---
 
+## Capas WMS de GFS en el sidebar — 2026-05-31
+
+Las variables del modelo GFS (descargadas por `agrotec_gfs_scheduler` y servidas por THREDDS/ncWMS) ahora son **capas activables** en el geovisor, no solo accesibles vía clic puntual.
+
+### Backend
+
+- **Nuevo `services/ingest_ws/app/gfs_layers.py`** — define 5 capas meteo y construye sus URLs WMS contra el proxy `/thredds/wms/testAll/actual/modelos/gfspgrb20p25.nc`:
+  - `t2m` Temperatura 2 m (raster · div-RdYlBu-inv · 288–306 K)
+  - `u10:v10-group` Viento 10 m magnitud + flechas (vector_arrows · seq-YlGnBu · 0–15 m/s)
+  - `r2` Humedad relativa (raster · seq-Blues · 0–100 %)
+  - `prate` Precipitación (raster · seq-PuBu · 0–~4 mm/h)
+  - `sdswrf` Radiación solar (raster · seq-Heat · 0–1100 W/m²)
+  - GetMap en `version=1.1.1 / SRS=EPSG:3857 / bbox={bbox-epsg-3857}` para que MapLibre las consuma como raster tiles. Bbox WGS84 leído del NetCDF (`xarray`) y cacheado (`lru_cache`), con fallback a la subregión Ecuador.
+  - `legend_url` vía `GetLegendGraphic` de ncWMS (colorbar vertical con la escala).
+- **`app/routers/layers.py`** — `GET /api/v1/layers` ahora **anexa** las capas GFS (categoría `meteorologia`) tras las de GeoNode, aplicando la misma lógica de `VisorLayerConfig` (visible/featured/order/opacidad). Así el admin las oculta/destaca/reordena desde el modal ⚙ igual que cualquier otra. Opacidad por defecto 0.75. Alternate sintético `gfs:<var>`.
+
+### Frontend (`services/ingest_ws/static/index.html`)
+
+- Nueva categoría **🌦 Meteorología GFS** en el sidebar (`CAT_LABELS`).
+- **Leyenda de color inline** debajo de cada capa meteo activa (imagen `GetLegendGraphic`), con estilos `.legend-row`/`.legend-img`. Reutiliza toda la maquinaria existente (toggle, opacidad, z-order, fit, URL state compartible).
+
+### Notas
+
+- Las capas muestran el **paso temporal por defecto** del modelo (análisis/f000). El NetCDF tiene 40 pasos → pendiente futuro: time-slider para animar el pronóstico.
+- La leyenda de temperatura va en **Kelvin** (ncWMS no convierte unidades en WMS); el valor en °C sigue disponible en el panel meteo al hacer clic.
+
+---
+
 ## Rebrand dominio — 2026-05-18 (tarde)
 
 - Dominio del sistema migrado de `agrotec.desarrollowebsite.com` → `idepalma.desarrollowebsite.com` (rename limpio, sin redirect).
