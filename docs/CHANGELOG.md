@@ -4,6 +4,16 @@
 
 ---
 
+## Fix: perfil vertical GFS fallaba (HDF5 no thread-safe) — 2026-05-31
+
+El perfil vertical en la pestaña Meteorología tiraba "Error: Unexpected token 'I'… is not valid JSON": `/api/v1/gfs/profile` devolvía un 500 en texto plano (`AttributeError: NetCDF: Can't open HDF5 attribute`). Causa: los endpoints GFS son `def` (sync) → FastAPI los corre en un threadpool → varios hilos abrían el mismo NetCDF a la vez, y netCDF4/HDF5 NO es thread-safe.
+
+- **`_NC_LOCK` (threading.Lock)** en `gfs.py` serializa el acceso a los NetCDF dentro del proceso (lecturas <0.2s). Verificado: 12 requests concurrentes al perfil → todos 200.
+- **`HDF5_USE_FILE_LOCKING=FALSE`** en el visor (compose) para lecturas entre procesos (2 workers) mientras el scheduler reescribe cada 6h.
+- Los 3 endpoints (`/times`, `/point`, `/profile`) ahora abren con `with` (cierran el handle) y capturan errores → **503 JSON limpio** en vez de 500 imparseable (el frontend muestra mensaje amable).
+
+---
+
 ## 4ª pestaña Meteorología + selector de hacienda global — 2026-05-31
 
 - **Selector de hacienda GLOBAL** en la barra superior (arriba a la derecha): una sola selección afecta a TODAS las pestañas y persiste al cambiar de pestaña. Reemplaza los selectores por-pestaña (Cartografía y Ortofoto). `applyHaciendaToActiveTab()` aplica la hacienda a la pestaña activa: Cartografía → filtra lotes + carga vectores + zoom; Ortofoto → muestra su ortofoto/mosaico; Meteorología/Multiespectral → encuadra.

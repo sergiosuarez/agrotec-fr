@@ -49,6 +49,9 @@ services:
       THREDDS_URL: http://agrotec_thredds:8080
       GFS_DIR: /data/actual
       APP_WORKERS: "2"
+      # Evita errores de lock HDF5 al leer los NetCDF GFS con lecturas concurrentes
+      # (2 workers) mientras el scheduler los reescribe cada 6h.
+      HDF5_USE_FILE_LOCKING: "FALSE"
     expose:
       - "8000"
     volumes:
