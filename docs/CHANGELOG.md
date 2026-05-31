@@ -4,6 +4,22 @@
 
 ---
 
+## Stepper temporal para capas WMS de GFS — 2026-05-31
+
+Las capas WMS de GFS dejaron de mostrar solo el paso por defecto: ahora se puede recorrer el pronóstico paso a paso. **Decisión de diseño:** stepper discreto (no slider en vivo). Análisis previo: un slider que re-pide WMS por tick da mal UX (lag/parpadeo); con nuestra subregión diminuta (~225 puntos, ~0.2s/tile) un stepper con prefetch del vecino es instantáneo y barato. Se descartó el slider animado por ahora (se puede montar encima reusando el cache si se quiere animación tipo Windy).
+
+### API (`services/ingest_ws/app/routers/gfs.py`)
+
+- Nuevo `GET /api/v1/gfs/times` → `{times:[ms], default_index}` (40 pasos; `default_index` = paso más cercano al momento actual). Lee `valid_time` del NetCDF de superficie.
+
+### Frontend (`services/ingest_ws/static/index.html`)
+
+- Stepper **◀ / ▶** + etiqueta de hora del pronóstico en la cabecera de la categoría 🌦 Meteorología GFS (global: mueve todas las capas GFS activas al mismo tiempo).
+- Cambiar de paso re-tilea las capas vía `map.getSource().setTiles([url+time])` (sin recrear el layer) y dispara **prefetch ligero del cuadro vecino** (1 imagen al bbox actual, 256px) para que el siguiente paso sea instantáneo.
+- Las capas GFS se añaden con el paso seleccionado (`withGfsTime`); compatible con el cambio de mapa base.
+
+---
+
 ## Perfil vertical: viento por altura + sincronizado al cursor — 2026-05-31
 
 El perfil vertical dejó de ser un snapshot fijo a +24h con solo T/HR. Ahora muestra **viento por altura** y se **sincroniza con el cursor temporal** del pronóstico de superficie.

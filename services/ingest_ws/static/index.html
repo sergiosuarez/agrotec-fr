@@ -62,7 +62,9 @@
         .category h2 .chev { transition: transform .15s ease; display: inline-block; margin-right: 4px; }
         .category.collapsed h2 .chev { transform: rotate(-90deg); }
         .category.collapsed .layer-item,
-        .category.collapsed .opacity-row { display: none; }
+        .category.collapsed .opacity-row,
+        .category.collapsed .legend-row,
+        .category.collapsed .gfs-time-row { display: none; }
 
         .layer-item { background: white; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
         .layer-item:hover { background: #fafffa; }
@@ -76,6 +78,13 @@
         .opacity-row input[type="range"] { flex: 1; accent-color: var(--palmar-green); height: 4px; }
         .legend-row { background: white; padding: 4px 8px 6px 28px; margin-top: -4px; margin-bottom: 4px; border-radius: 0 0 4px 4px; }
         .legend-img { max-height: 160px; background: #fff; border: 1px solid var(--border); border-radius: 3px; padding: 2px; }
+        /* Stepper temporal de capas GFS */
+        .gfs-time-row { display: flex; align-items: center; gap: 6px; background: #eef5ec; border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; margin: 0 0 8px; }
+        .gfs-time-btn { background: var(--palmar-green); color: white; border: none; width: 24px; height: 24px; border-radius: 3px; cursor: pointer; font-size: .8rem; line-height: 1; flex: 0 0 auto; }
+        .gfs-time-btn:hover { background: var(--palmar-green-dark); }
+        .gfs-time-btn:disabled { background: #b9c7b6; cursor: default; }
+        .gfs-time-label { flex: 1; text-align: center; font-size: .72rem; color: var(--palmar-green-dark); font-weight: 600; }
+        .gfs-time-fhr { font-weight: 400; color: var(--muted); }
 
         .status-row { display: flex; gap: 6px; font-size: .7rem; padding: 6px 0; }
         .badge { display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: .65rem; font-weight: 600; }
@@ -299,11 +308,105 @@ const state = {
     activeLayers: {},    // { alternate: {opacity, source} }
 };
 
+// --- Dimension temporal de las capas GFS (stepper discreto) ---
+let gfsTimes = [];       // [ms,...] pasos del modelo (alineados con /point y /profile)
+let gfsTimeIdx = 0;      // indice del paso temporal seleccionado
+
+// ms epoch -> ISO8601 que entiende ncWMS (param time=)
+function gfsIso(idx) { return new Date(gfsTimes[idx]).toISOString(); }
+
+// Anexa &time= a una URL WMS de THREDDS (ncWMS)
+function withGfsTime(url, idx) {
+    if (!gfsTimes.length) return url;
+    return url + '&time=' + encodeURIComponent(gfsIso(idx));
+}
+
+// Si la capa es GFS y ya hay tiempos cargados, devuelve la URL con el paso actual
+function tilesUrlFor(layer) {
+    return (layer.alternate.startsWith('gfs:') && gfsTimes.length)
+        ? withGfsTime(layer.wms_url, gfsTimeIdx)
+        : layer.wms_url;
+}
+
+// lon/lat -> EPSG:3857 (para prefetch con bbox concreto)
+function ll3857(lng, lat) {
+    const x = lng * 20037508.34 / 180;
+    let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+    y = y * 20037508.34 / 180;
+    return [x, y];
+}
+
+function gfsTimeLabel(idx) {
+    const d = new Date(gfsTimes[idx]);
+    const txt = d.toLocaleString([], { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `🕒 ${txt} <span class="gfs-time-fhr">(${idx + 1}/${gfsTimes.length})</span>`;
+}
+
+async function loadGfsTimes() {
+    try {
+        const r = await fetch(`${API}/api/v1/gfs/times`);
+        const d = await r.json();
+        gfsTimes = d.times || [];
+        gfsTimeIdx = Math.min(Math.max(d.default_index || 0, 0), Math.max(gfsTimes.length - 1, 0));
+    } catch (e) { gfsTimes = []; }
+}
+
+function renderGfsTimeControl() {
+    if (!gfsTimes.length) return '';
+    return `<div class="gfs-time-row">
+        <button class="gfs-time-btn" id="gfs-prev" title="Paso anterior" ${gfsTimeIdx <= 0 ? 'disabled' : ''}>◀</button>
+        <span class="gfs-time-label">${gfsTimeLabel(gfsTimeIdx)}</span>
+        <button class="gfs-time-btn" id="gfs-next" title="Paso siguiente" ${gfsTimeIdx >= gfsTimes.length - 1 ? 'disabled' : ''}>▶</button>
+    </div>`;
+}
+
+function updateGfsTimeUI() {
+    const lbl = document.querySelector('.gfs-time-label');
+    if (lbl) lbl.innerHTML = gfsTimeLabel(gfsTimeIdx);
+    const prev = document.getElementById('gfs-prev'), next = document.getElementById('gfs-next');
+    if (prev) prev.disabled = gfsTimeIdx <= 0;
+    if (next) next.disabled = gfsTimeIdx >= gfsTimes.length - 1;
+}
+
+// Cambia el paso temporal y re-tilea las capas GFS activas (sin recrearlas)
+function changeGfsTime(delta) {
+    const ni = gfsTimeIdx + delta;
+    if (ni < 0 || ni >= gfsTimes.length) return;
+    gfsTimeIdx = ni;
+    Object.entries(state.activeLayers).forEach(([alt, info]) => {
+        if (!alt.startsWith('gfs:')) return;
+        const layer = state.layers.find(l => l.alternate === alt);
+        const src = map.getSource(info.sourceId);
+        if (src && src.setTiles) src.setTiles([withGfsTime(layer.wms_url, gfsTimeIdx)]);
+    });
+    updateGfsTimeUI();
+    prefetchGfsNeighbors();
+}
+
+// Prefetch ligero del cuadro vecino (1 imagen al bbox actual) para que el siguiente paso sea instantaneo
+function prefetchGfsNeighbors() {
+    const activeGfs = Object.keys(state.activeLayers).filter(a => a.startsWith('gfs:'));
+    if (!activeGfs.length || !gfsTimes.length) return;
+    const b = map.getBounds();
+    const [minx, miny] = ll3857(b.getWest(), b.getSouth());
+    const [maxx, maxy] = ll3857(b.getEast(), b.getNorth());
+    const bbox = `${minx},${miny},${maxx},${maxy}`;
+    [gfsTimeIdx - 1, gfsTimeIdx + 1].filter(i => i >= 0 && i < gfsTimes.length).forEach(i => {
+        activeGfs.forEach(alt => {
+            const layer = state.layers.find(l => l.alternate === alt);
+            const url = withGfsTime(layer.wms_url.replace('{bbox-epsg-3857}', bbox), i)
+                .replace('width=512', 'width=256').replace('height=512', 'height=256');
+            const img = new Image(); img.src = url;   // se descarta; solo calienta cache navegador/THREDDS
+        });
+    });
+}
+
 // --- Bootstrap: cargar capas + health + GFS ---
 async function loadAll() {
     try {
         const r = await fetch(`${API}/api/v1/layers`);
         state.layers = await r.json();
+        await loadGfsTimes();   // antes de activar featured, para que las capas GFS salgan con el paso correcto
         renderLayersTab();
         // Activar las featured automáticamente
         state.layers.filter(l => l.featured).forEach(l => addWmsLayer(l));
@@ -334,6 +437,7 @@ function renderLayersTab() {
         return `
         <div class="category ${collapsed}" data-cat="${cat}">
             <h2 data-cat="${cat}"><span><span class="chev">▼</span>${CAT_LABELS[cat] || cat}</span> <span class="count">${items.length}</span></h2>
+            ${cat === 'meteorologia' ? renderGfsTimeControl() : ''}
             ${items.map(l => renderLayerItem(l)).join('')}
         </div>
     `;}).join('');
@@ -376,6 +480,9 @@ function renderLayersTab() {
             setOpacity(alt, e.target.value / 100);
         });
     });
+    // Stepper temporal GFS
+    document.getElementById('gfs-prev')?.addEventListener('click', () => changeGfsTime(-1));
+    document.getElementById('gfs-next')?.addEventListener('click', () => changeGfsTime(1));
 }
 
 function renderLayerItem(l) {
@@ -406,13 +513,14 @@ function addWmsLayer(layer) {
     if (layer.subtype === 'vector' && defaultOp === 1.0) defaultOp = 0.6;
     map.addSource(id, {
         type: 'raster',
-        tiles: [layer.wms_url],
+        tiles: [tilesUrlFor(layer)],
         tileSize: 512,
         attribution: 'IDEPalma / GeoServer'
     });
     map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': defaultOp } });
     state.activeLayers[layer.alternate] = { opacity: defaultOp, sourceId: id, subtype: layer.subtype };
     renderLayersTab();
+    if (layer.alternate.startsWith('gfs:')) prefetchGfsNeighbors();
     setTimeout(updateUrlState, 50);
 }
 
@@ -476,7 +584,7 @@ function changeBasemap(key) {
     const newStyle = basemapStyle(key);
     Object.entries(state.activeLayers).forEach(([alt, info]) => {
         const layer = state.layers.find(l => l.alternate === alt);
-        newStyle.sources[info.sourceId] = { type: 'raster', tiles: [layer.wms_url], tileSize: 512 };
+        newStyle.sources[info.sourceId] = { type: 'raster', tiles: [tilesUrlFor(layer)], tileSize: 512 };
         newStyle.layers.push({ id: info.sourceId, type: 'raster', source: info.sourceId, paint: { 'raster-opacity': info.opacity } });
     });
     map.setStyle(newStyle);

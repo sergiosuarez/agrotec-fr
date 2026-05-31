@@ -45,6 +45,30 @@ def gfs_status() -> GFSStatusOut:
     return GFSStatusOut(available=bool(files), files=files, last_modified=last)
 
 
+@router.get("/times")
+def gfs_times() -> dict:
+    """Lista de pasos temporales (valid_time, ms epoch) del modelo de superficie.
+
+    Lo usa el visor para el stepper temporal de las capas WMS de GFS. `default_index`
+    es el paso mas cercano al momento actual.
+    """
+    import pandas as pd
+    import xarray as xr
+
+    nc_path, _ = _gfs_paths()
+    if not nc_path.exists():
+        return {"times": [], "default_index": 0}
+
+    ds = xr.open_dataset(str(nc_path))
+    vt = np.atleast_1d(ds.valid_time.values)
+    times = [int(pd.Timestamp(t).value // 1_000_000) for t in vt]
+    now_ms = int(pd.Timestamp.utcnow().value // 1_000_000)
+    default_index = (
+        min(range(len(times)), key=lambda i: abs(times[i] - now_ms)) if times else 0
+    )
+    return {"times": times, "default_index": default_index}
+
+
 @router.get("/point")
 def gfs_point(
     lat: float = Query(..., ge=-90, le=90),
