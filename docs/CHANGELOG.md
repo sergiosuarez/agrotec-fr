@@ -47,7 +47,7 @@ Las variables del modelo GFS (descargadas por `agrotec_gfs_scheduler` y servidas
 
 - **Nuevo `services/ingest_ws/app/gfs_layers.py`** — define 5 capas meteo y construye sus URLs WMS contra el proxy `/thredds/wms/testAll/actual/modelos/gfspgrb20p25.nc`:
   - `t2m` Temperatura 2 m (raster · div-RdYlBu-inv · 288–306 K)
-  - `u10:v10-group` Viento 10 m magnitud + flechas (vector_arrows · seq-YlGnBu · 0–15 m/s)
+  - `u10:v10-group` Viento 10 m (vectores) — flechas coloreadas+dimensionadas por magnitud, fondo transparente (`colored_sized_arrows` · seq-YlGnBu · 0–15 m/s). _Nota 2026-05-31: cambiado de `vector_arrows` (que rellenaba el fondo de magnitud, 100% opaco) a `colored_sized_arrows` (solo flechas, ~2% opaco) a pedido — vectores limpios sobre el mapa._
   - `r2` Humedad relativa (raster · seq-Blues · 0–100 %)
   - `prate` Precipitación (raster · seq-PuBu · 0–~4 mm/h)
   - `sdswrf` Radiación solar (raster · seq-Heat · 0–1100 W/m²)

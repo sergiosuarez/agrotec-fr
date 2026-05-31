@@ -36,10 +36,10 @@ GFS_LAYERS: list[dict] = [
         "abstract": "Temperatura del aire a 2 m (GFS). Escala 15–33 °C.",
     },
     {
-        "var": "u10:v10-group", "title": "Viento 10 m (magnitud + flechas)",
-        "style": "vector_arrows", "palette": "seq-YlGnBu",
+        "var": "u10:v10-group", "title": "Viento 10 m (vectores)",
+        "style": "colored_sized_arrows", "palette": "seq-YlGnBu",
         "colorscalerange": "0,15", "units": "m/s", "order": 701,
-        "abstract": "Viento a 10 m: magnitud coloreada + flechas de direccion (GFS).",
+        "abstract": "Viento a 10 m: flechas de direccion coloreadas y dimensionadas por magnitud, fondo transparente (GFS).",
     },
     {
         "var": "r2", "title": "Humedad relativa 2 m", "style": "raster",
