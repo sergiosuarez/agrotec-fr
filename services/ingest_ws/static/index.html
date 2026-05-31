@@ -499,10 +499,11 @@ function prefetchGfsNeighbors() {
 // HACIENDAS — selector + zoom (Cartografía agrícola)
 // Driven por /api/v1/haciendas/extents (atributo nombre_hcd de la capa de lotes).
 // ============================================================================
-let haciendas = [];            // [{nombre, n_lotes, area_ha, bbox:[minx,miny,maxx,maxy]}]
-let selectedHacienda = '';     // '' = todas
+let haciendas = [];            // [{nombre, codigo, area_ha, bbox:[minx,miny,maxx,maxy]}] desde haciendas_totales
+let selectedHacienda = '';     // '' = todas; si no, el CÓDIGO (nombre_hcd, ej. "HCDA_AMELIA")
 let autoRelated = [];          // alternates de capas relacionadas que cargamos auto (para limpiarlas al cambiar)
-const HACIENDAS_ALT = 'geonode:haciendas_palmar';
+// Capa autoritativa de límites de hacienda (26 polígonos, filtrable por nombre_hcd)
+const HACIENDAS_ALT = 'geonode:haciendas_totales';
 
 // Normaliza un texto a slug (minus, sin acentos, _). Para emparejar capas con haciendas.
 function slug(s) {
@@ -528,6 +529,7 @@ function relatedLayers(nombre) {
     if (!want.length) return [];
     return state.layers.filter(l => {
         if (l.alternate === HACIENDAS_ALT) return false;
+        if (l.alternate.startsWith('geonode:hcda_')) return false;   // límites individuales: no como relacionada
         const toks = new Set(slug(l.alternate + ' ' + (l.title || '')).split('_'));
         return want.every(t => toks.has(t));
     });
@@ -553,7 +555,7 @@ function populateGlobalHacienda() {
     const sel = document.getElementById('global-hacienda');
     if (!sel || !haciendas.length) return;
     sel.innerHTML = '<option value="">— Todas —</option>' +
-        haciendas.map(h => `<option value="${h.nombre}">${h.nombre} (${h.n_lotes})</option>`).join('');
+        haciendas.map(h => `<option value="${h.codigo}">${h.nombre}</option>`).join('');
     sel.value = selectedHacienda;
 }
 
@@ -571,24 +573,22 @@ function fitHaciendasAll() {
 // Anexa un CQL_FILTER a una URL WMS de GeoServer
 function withCql(url, cql) { return url + '&CQL_FILTER=' + encodeURIComponent(cql); }
 
-// Selecciona una hacienda: filtra la capa de lotes por nombre_hcd y hace zoom a su bbox.
-// nombre = '' => muestra todas (sin filtro) y encuadra todas.
-// La capa de lotes (Lotes Palmar) vive en TODAS las pestañas, filtrada por la hacienda
-// seleccionada en el selector global. Si nombre = '' muestra todos los lotes.
-function applyLotesFilter(nombre) {
+// Límite de hacienda (haciendas_totales) en TODAS las pestañas, filtrado por código
+// (nombre_hcd). codigo = '' => muestra las 26 sin filtro.
+function applyLotesFilter(codigo) {
     const layer = state.layers.find(l => l.alternate === HACIENDAS_ALT);
     if (!layer) return;
     if (!state.activeLayers[HACIENDAS_ALT]) addWmsLayer(layer);
     const info = state.activeLayers[HACIENDAS_ALT];
     const src = info && map.getSource(info.sourceId);
-    const url = nombre ? withCql(layer.wms_url, `nombre_hcd='${nombre.replace(/'/g, "''")}'`) : layer.wms_url;
+    const url = codigo ? withCql(layer.wms_url, `nombre_hcd='${codigo.replace(/'/g, "''")}'`) : layer.wms_url;
     if (src && src.setTiles) src.setTiles([url]);
 }
 
-// Capas vectoriales relacionadas de la hacienda (solo en Cartografía)
-function loadCartoVectors(nombre) {
-    if (!nombre) return;
-    relatedLayers(nombre).filter(l => l.subtype !== 'raster').forEach(l => {
+// Capas vectoriales relacionadas de la hacienda (solo en Cartografía), por nombre legible
+function loadCartoVectors(matchName) {
+    if (!matchName) return;
+    relatedLayers(matchName).filter(l => l.subtype !== 'raster').forEach(l => {
         if (!state.activeLayers[l.alternate]) { addWmsLayer(l); autoRelated.push(l.alternate); }
     });
 }
@@ -638,7 +638,9 @@ function categoryBlock(cat, items) {
 // Lista de capas de Cartografía (vectores): sin ortofotos ni meteo (tienen su pestaña)
 function renderLayersTab() {
     const q = document.getElementById('search-input').value.toLowerCase();
-    const carto = state.layers.filter(l => l.category !== 'ortomosaicos' && l.category !== 'meteorologia');
+    const carto = state.layers.filter(l =>
+        l.category !== 'ortomosaicos' && l.category !== 'meteorologia' &&
+        l.alternate !== HACIENDAS_ALT && !l.alternate.startsWith('geonode:hcda_'));
     const filtered = q ? carto.filter(l => (l.title + l.alternate).toLowerCase().includes(q)) : carto;
     const byCat = {};
     filtered.forEach(l => (byCat[l.category] ||= []).push(l));
@@ -1248,12 +1250,14 @@ document.getElementById('global-hacienda').addEventListener('change', e => {
 });
 
 function applyHaciendaToActiveTab() {
-    const nombre = selectedHacienda;
-    clearAutoRelated();                 // limpia vectores de la hacienda anterior
-    applyLotesFilter(nombre);           // lotes en TODAS las pestañas, filtrado
-    if (currentMode === 'cartografia') loadCartoVectors(nombre);
-    else if (currentMode === 'ortofoto') showOrtoForHacienda(nombre);
-    const h = haciendas.find(x => x.nombre === nombre);
+    const codigo = selectedHacienda;                 // '' = todas; o nombre_hcd (HCDA_*)
+    const h = codigo ? haciendas.find(x => x.codigo === codigo) : null;
+    // nombre para emparejar ortofotos/vectores: legible, sin el sufijo de pieza (-1, _2…)
+    const matchName = h ? h.nombre.replace(/[-_\s]*\d+$/, '') : '';
+    clearAutoRelated();                              // limpia vectores de la hacienda anterior
+    applyLotesFilter(codigo);                        // límite de hacienda en TODAS las pestañas
+    if (currentMode === 'cartografia') loadCartoVectors(matchName);
+    else if (currentMode === 'ortofoto') showOrtoForHacienda(matchName);
     if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: currentMode === 'ortofoto' ? 50 : 60, maxZoom: currentMode === 'ortofoto' ? 18 : 16 });
     else fitHaciendasAll();
     bringLotesToTop();
@@ -1275,13 +1279,12 @@ function clearOrtoShown() {
     ortoShown = [];
 }
 
-function showOrtoForHacienda(nombre) {
+function showOrtoForHacienda(matchName) {
     clearOrtoShown();
     const body = document.getElementById('orto-body');
-    if (!nombre) { body.innerHTML = '<div class="empty">Elige una hacienda para ver su ortofoto.</div>'; return; }
-    const h = haciendas.find(x => x.nombre === nombre);
-    if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 50, maxZoom: 18 });
-    ortoList = relatedLayers(nombre).filter(l => l.subtype === 'raster');
+    if (!matchName) { body.innerHTML = '<div class="empty">Elige una hacienda (arriba a la derecha) para ver su ortofoto.</div>'; return; }
+    // el zoom lo hace applyHaciendaToActiveTab (con el bbox real del límite)
+    ortoList = relatedLayers(matchName).filter(l => l.subtype === 'raster');
     if (!ortoList.length) { body.innerHTML = '<div class="empty">No hay ortofoto cargada para esta hacienda todavía.</div>'; return; }
     // Mostrar TODAS las piezas juntas: forman el mosaico de la ortofoto de la hacienda
     // (varias piezas = un solo vuelo que no se unió por tamaño, NO fechas distintas).

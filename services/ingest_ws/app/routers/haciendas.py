@@ -12,46 +12,39 @@ from ..schemas import HaciendaOut
 
 router = APIRouter(prefix="/api/v1/haciendas", tags=["haciendas"])
 
-# Capa GeoNode (geonode_data) que contiene los lotes de todas las haciendas, con el
-# atributo `nombre_hcd` identificando a cual hacienda pertenece cada poligono.
-_HACIENDAS_TABLE = "haciendas_palmar"
-_HACIENDA_ATTR = "nombre_hcd"
+# Capa autoritativa de límites de hacienda en geonode_data: 1 polígono por hacienda,
+# `nombre` (display) + `nombre_hcd` (código, ej. HCDA_AMELIA). El visor la filtra por
+# `nombre_hcd` para mostrar/encuadrar la hacienda elegida.
+_HACIENDAS_TABLE = "haciendas_totales"
 
 
 class HaciendaExtentOut(BaseModel):
-    nombre: str
-    n_lotes: int
+    nombre: str                       # nombre legible (ej. "Amelia", "Jenny Elizabeth-1")
+    codigo: str                       # nombre_hcd (ej. "HCDA_AMELIA") — para filtrar la capa
     area_ha: float | None = None
     bbox: list[float]                 # [minx, miny, maxx, maxy] WGS84
 
 
 @router.get("/extents", response_model=list[HaciendaExtentOut])
-def haciendas_extents(
-    layer: str = Query(_HACIENDAS_TABLE, description="tabla de lotes en geonode_data"),
-    attr: str = Query(_HACIENDA_ATTR, description="atributo que identifica la hacienda"),
-) -> list[HaciendaExtentOut]:
-    """Lista de haciendas con su bbox (WGS84), nro de lotes y area, derivada de la
-    capa vectorial publicada en GeoNode (atributo `nombre_hcd`).
+def haciendas_extents() -> list[HaciendaExtentOut]:
+    """Las 26 haciendas (límites reales) con su bbox WGS84, código y área.
 
-    No depende de la tabla relacional `hacienda` (que puede estar vacia); arma el
-    catalogo directo de la geodata para el selector de hacienda del visor.
+    Fuente: `haciendas_totales` (geonode_data). Arma el catálogo para el selector de
+    hacienda global del visor.
     """
-    # Whitelist defensivo: solo identificadores simples (no inyeccion en el SQL armado).
-    if not layer.replace("_", "").isalnum() or not attr.replace("_", "").isalnum():
-        raise HTTPException(400, "layer/attr invalidos")
-
     sql = text(f"""
-        SELECT {attr} AS nombre,
-               count(*) AS n_lotes,
-               round((sum(ST_Area(geometry)) / 10000.0)::numeric, 2) AS area_ha,
-               ST_XMin(ST_Extent(ST_Transform(ST_Force2D(geometry), 4326))) AS minx,
-               ST_YMin(ST_Extent(ST_Transform(ST_Force2D(geometry), 4326))) AS miny,
-               ST_XMax(ST_Extent(ST_Transform(ST_Force2D(geometry), 4326))) AS maxx,
-               ST_YMax(ST_Extent(ST_Transform(ST_Force2D(geometry), 4326))) AS maxy
-        FROM {layer}
-        WHERE {attr} IS NOT NULL AND {attr} <> ''
-        GROUP BY {attr}
-        ORDER BY {attr}
+        SELECT nombre,
+               nombre_hcd AS codigo,
+               round((ST_Area(ST_Force2D(geometry)) / 10000.0)::numeric, 2) AS area_ha,
+               ST_XMin(g) AS minx, ST_YMin(g) AS miny,
+               ST_XMax(g) AS maxx, ST_YMax(g) AS maxy
+        FROM (
+            SELECT nombre, nombre_hcd, geometry,
+                   ST_Transform(ST_Force2D(geometry), 4326) AS g
+            FROM {_HACIENDAS_TABLE}
+            WHERE nombre IS NOT NULL AND nombre <> ''
+        ) t
+        ORDER BY nombre
     """)
     try:
         with get_geodata_engine().connect() as conn:
@@ -62,7 +55,7 @@ def haciendas_extents(
     return [
         HaciendaExtentOut(
             nombre=r["nombre"],
-            n_lotes=r["n_lotes"],
+            codigo=r["codigo"],
             area_ha=float(r["area_ha"]) if r["area_ha"] is not None else None,
             bbox=[r["minx"], r["miny"], r["maxx"], r["maxy"]],
         )

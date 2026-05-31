@@ -4,6 +4,17 @@
 
 ---
 
+## Selector basado en haciendas_totales (26 límites reales) — 2026-05-31
+
+Llegaron los shapefiles reales de haciendas: `haciendas_totales` (26 polígonos de límite, columnas `nombre` + `nombre_hcd`=código `HCDA_*`) + un `hcda_<x>` por hacienda. El selector global pasa a usar esta capa autoritativa (antes derivaba 22 del atributo `nombre_hcd` de los lotes).
+
+- **`/api/v1/haciendas/extents`** ahora consulta `haciendas_totales` → 26 haciendas con `nombre` (display), `codigo` (nombre_hcd), `area_ha` y bbox real del límite.
+- **Frontend**: `HACIENDAS_ALT = geonode:haciendas_totales`; el selector muestra los 26 nombres (value=código). Al elegir: filtra el límite por `nombre_hcd` (CQL), encuadra al bbox real, y empareja ortofotos/vectores por el nombre legible sin sufijo de pieza (`Jenny Elizabeth-1` → `Jenny Elizabeth`). El límite persiste en todas las pestañas (estilo línea oscura). Los `hcda_*` y `haciendas_totales` se excluyen de la lista de Cartografía (son selector-driven); Lotes Palmar (`haciendas_palmar`) queda como capa toggleable aparte.
+- Estilo de línea (`lote_borde_verde`) aplicado a `haciendas_totales`.
+- Reconciliado: **San Fernando (límite) = Agricola Jose Fernando (lotes)** — mismo centroide e intersección espacial confirmada; misma hacienda con nombre distinto entre datasets. El filtrado de lotes por hacienda queda pendiente (mapeo de nombres) — decisión del usuario.
+
+---
+
 ## Pulido pestaña Meteorología + UX global — 2026-05-31
 
 - **Logo IDEPalma** en el topbar (reemplaza el "🌱 IDEPalma" de texto): imagen `encabezado.png` sobre fondo blanco.
