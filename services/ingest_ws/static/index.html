@@ -27,6 +27,10 @@
         .mode-tab { display: flex; align-items: center; gap: 6px; padding: 0 22px; cursor: pointer; font-size: .9rem; color: #ffffffcc; border-bottom: 3px solid transparent; user-select: none; }
         .mode-tab:hover { background: #ffffff14; }
         .mode-tab.active { color: #fff; font-weight: 600; border-bottom-color: var(--palmar-red); background: #ffffff1f; }
+        /* Selector de hacienda GLOBAL (afecta todas las pestañas) */
+        #topbar .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+        #topbar .topbar-right label { font-size: .78rem; color: #ffffffd0; white-space: nowrap; }
+        #global-hacienda { padding: 5px 8px; border: 1px solid var(--palmar-green); border-radius: 4px; font-size: .82rem; background: #fff; color: var(--text); cursor: pointer; max-width: 230px; }
 
         #app { display: grid; grid-template-columns: 340px 1fr; flex: 1; min-height: 0; position: relative; transition: grid-template-columns .25s ease; }
         #app.sidebar-collapsed { grid-template-columns: 0 1fr; }
@@ -205,9 +209,14 @@
     <div id="topbar">
         <div class="brand">🌱 IDEPalma</div>
         <div class="modes">
-            <div class="mode-tab active" data-mode="cartografia">🗺 Cartografía agrícola</div>
-            <div class="mode-tab" data-mode="ortofoto">🛩 Ortofoto Haciendas</div>
+            <div class="mode-tab active" data-mode="cartografia">🗺 Cartografía</div>
+            <div class="mode-tab" data-mode="ortofoto">🛩 Ortofoto</div>
             <div class="mode-tab" data-mode="multiespectral">🌈 Multiespectral</div>
+            <div class="mode-tab" data-mode="meteorologia">🌦 Meteorología</div>
+        </div>
+        <div class="topbar-right">
+            <label for="global-hacienda">🏞 Hacienda</label>
+            <select id="global-hacienda"><option value="">— Todas —</option></select>
         </div>
     </div>
     <div id="app">
@@ -251,10 +260,8 @@
         <!-- ===== Modo: Ortofoto Haciendas ===== -->
         <div id="mode-ortofoto" class="mode-panel">
             <div class="mode-scroll">
-                <div class="mode-intro">Ortofotos por hacienda. Elige una hacienda para ver su ortofoto; con el comparador puedes deslizar entre dos fechas (cuando haya más de una).</div>
-                <label class="of-label">🏞 Hacienda</label>
-                <select id="orto-hacienda"><option value="">— Elige hacienda —</option></select>
-                <div id="orto-body"><div class="empty">Elige una hacienda para ver su ortofoto.</div></div>
+                <div class="mode-intro">Ortofoto de la hacienda seleccionada (selector arriba a la derecha). Si tiene varias piezas se muestran juntas como mosaico.</div>
+                <div id="orto-body"><div class="empty">Elige una hacienda (arriba a la derecha) para ver su ortofoto.</div></div>
             </div>
         </div>
 
@@ -276,6 +283,14 @@
                     </select>
                     <p style="color:#999;margin-top:14px;">Próximamente — pendiente de procesar la cámara multiespectral. El cálculo se hará con las fórmulas de WebODM (rasterio + numexpr) cuando haya imágenes con banda NIR.</p>
                 </div>
+            </div>
+        </div>
+
+        <!-- ===== Modo: Meteorología (capas GFS) ===== -->
+        <div id="mode-meteorologia" class="mode-panel">
+            <div class="mode-scroll">
+                <div class="mode-intro">Capas del modelo GFS (temperatura, viento, humedad, precipitación, radiación). Usa el control de tiempo para recorrer el pronóstico. Tip: Shift+clic en el mapa abre el pronóstico puntual.</div>
+                <div id="meteo-layers"><div class="loading">cargando…</div></div>
             </div>
         </div>
 
@@ -527,6 +542,16 @@ async function loadHaciendas() {
         const d = await r.json();
         haciendas = Array.isArray(d) ? d : [];
     } catch (e) { haciendas = []; }
+    populateGlobalHacienda();
+}
+
+// Llena el selector de hacienda GLOBAL del topbar
+function populateGlobalHacienda() {
+    const sel = document.getElementById('global-hacienda');
+    if (!sel || !haciendas.length) return;
+    sel.innerHTML = '<option value="">— Todas —</option>' +
+        haciendas.map(h => `<option value="${h.nombre}">${h.nombre} (${h.n_lotes})</option>`).join('');
+    sel.value = selectedHacienda;
 }
 
 function haciendasGlobalBounds() {
@@ -538,22 +563,6 @@ function haciendasGlobalBounds() {
 function fitHaciendasAll() {
     const b = haciendasGlobalBounds();
     if (b) map.fitBounds(b, { padding: 40 });
-}
-
-function renderHaciendaSelector() {
-    if (!haciendas.length) return '';
-    const opts = ['<option value="">— Todas las haciendas —</option>'].concat(
-        haciendas.map(h => `<option value="${h.nombre}" ${h.nombre === selectedHacienda ? 'selected' : ''}>${h.nombre} (${h.n_lotes} lotes)</option>`)
-    );
-    return `<div class="hacienda-selector">
-        <label>🏞 Hacienda</label>
-        <select id="hacienda-select">${opts.join('')}</select>
-    </div>`;
-}
-
-function bindHaciendaSelect() {
-    const sel = document.getElementById('hacienda-select');
-    if (sel) sel.addEventListener('change', e => selectHacienda(e.target.value));
 }
 
 // Anexa un CQL_FILTER a una URL WMS de GeoServer
@@ -589,7 +598,8 @@ function selectHacienda(nombre) {
         const h = haciendas.find(x => x.nombre === nombre);
         if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 60, maxZoom: 17 });
     } else {
-        if (layer && state.activeLayers[HACIENDAS_ALT]) setLotesTiles(layer.wms_url);   // quitar filtro
+        // "Todas": mostrar todos los lotes sin filtro
+        if (layer) { if (!state.activeLayers[HACIENDAS_ALT]) addWmsLayer(layer); setLotesTiles(layer.wms_url); }
         fitHaciendasAll();
     }
 }
@@ -606,11 +616,9 @@ async function loadAll() {
         state.layers.filter(l => l.featured).forEach(l => addWmsLayer(l));
         // Restaurar capas de un link compartido (param l), si vienen
         parseUrlLayers();
-        // Vista inicial determinista: vista de link compartido > extent de haciendas > featured.
-        // (updateUrlState ya NO persiste la vista en cada movimiento; solo el boton Compartir
-        //  pone lat/lng en la URL, asi que un load normal siempre encuadra las haciendas.)
+        // Vista inicial: link compartido > Cartografía con lotes (Todas) + encuadre haciendas > featured.
         if (!parseUrlView()) {
-            if (haciendas.length) fitHaciendasAll();
+            if (haciendas.length) applyHaciendaToActiveTab();   // Cartografía: muestra los lotes + encuadra
             else if (state.layers.some(l => l.featured)) fitToFeatured();
         }
     } catch (e) {
@@ -619,46 +627,49 @@ async function loadAll() {
     loadHealth(); loadGFS();
 }
 
+const CAT_LABELS = { meteorologia: '🌦 Meteorología GFS', ortomosaicos: '🛩 Ortomosaicos drone', haciendas: '🌾 Haciendas y lotes', vectoriales: '📐 Vectoriales', limites: '🗺 Límites administrativos', infraestructura: '🛣 Infraestructura', raster_otros: '🖼 Otros rasters', otros: '📦 Otros' };
+
+function categoryBlock(cat, items) {
+    const collapsed = state.collapsedCats?.[cat] ? 'collapsed' : '';
+    return `<div class="category ${collapsed}" data-cat="${cat}">
+        <h2 data-cat="${cat}"><span><span class="chev">▼</span>${CAT_LABELS[cat] || cat}</span> <span class="count">${items.length}</span></h2>
+        ${cat === 'meteorologia' ? renderGfsTimeControl() : ''}
+        ${items.map(l => renderLayerItem(l)).join('')}
+    </div>`;
+}
+
+// Lista de capas de Cartografía (vectores): sin ortofotos ni meteo (tienen su pestaña)
 function renderLayersTab() {
     const q = document.getElementById('search-input').value.toLowerCase();
-    // En Cartografía NO se listan las ortofotos (categoría 'ortomosaicos'): viven en la pestaña Ortofoto.
-    const base = state.layers.filter(l => l.category !== 'ortomosaicos');
-    const filtered = q ? base.filter(l => (l.title + l.alternate).toLowerCase().includes(q)) : base;
-
-    if (filtered.length === 0) {
-        document.getElementById('tab-layers').innerHTML = renderHaciendaSelector() + '<div class="empty">Sin resultados</div>';
-        bindHaciendaSelect();
-        return;
-    }
-    // Agrupar por categoria
+    const carto = state.layers.filter(l => l.category !== 'ortomosaicos' && l.category !== 'meteorologia');
+    const filtered = q ? carto.filter(l => (l.title + l.alternate).toLowerCase().includes(q)) : carto;
     const byCat = {};
     filtered.forEach(l => (byCat[l.category] ||= []).push(l));
+    document.getElementById('tab-layers').innerHTML = filtered.length
+        ? Object.entries(byCat).map(([c, it]) => categoryBlock(c, it)).join('')
+        : '<div class="empty">Sin resultados</div>';
+    renderMeteoTab();
+    bindLayerControls();
+}
 
-    const CAT_LABELS = { meteorologia: '🌦 Meteorología GFS', ortomosaicos: '🛩 Ortomosaicos drone', haciendas: '🌾 Haciendas y lotes', vectoriales: '📐 Vectoriales', limites: '🗺 Límites administrativos', infraestructura: '🛣 Infraestructura', raster_otros: '🖼 Otros rasters', otros: '📦 Otros' };
+// Pestaña Meteorología: solo las capas GFS + stepper temporal
+function renderMeteoTab() {
+    const el = document.getElementById('meteo-layers');
+    if (!el) return;
+    const meteo = state.layers.filter(l => l.category === 'meteorologia');
+    el.innerHTML = meteo.length ? categoryBlock('meteorologia', meteo) : '<div class="empty">Capas GFS no disponibles.</div>';
+}
 
-    const html = Object.entries(byCat).map(([cat, items]) => {
-        const collapsed = state.collapsedCats?.[cat] ? 'collapsed' : '';
-        return `
-        <div class="category ${collapsed}" data-cat="${cat}">
-            <h2 data-cat="${cat}"><span><span class="chev">▼</span>${CAT_LABELS[cat] || cat}</span> <span class="count">${items.length}</span></h2>
-            ${cat === 'meteorologia' ? renderGfsTimeControl() : ''}
-            ${items.map(l => renderLayerItem(l)).join('')}
-        </div>
-    `;}).join('');
-    document.getElementById('tab-layers').innerHTML = renderHaciendaSelector() + html;
-    bindHaciendaSelect();
-
-    // Toggle colapso de categorias
-    document.querySelectorAll('#tab-layers .category h2').forEach(h => {
-        h.addEventListener('click', e => {
+// Bindings de las capas (document-wide: cubre #tab-layers y #meteo-layers)
+function bindLayerControls() {
+    document.querySelectorAll('#tab-layers .category h2, #meteo-layers .category h2').forEach(h => {
+        h.addEventListener('click', () => {
             const cat = h.dataset.cat;
             state.collapsedCats ||= {};
             state.collapsedCats[cat] = !state.collapsedCats[cat];
             h.closest('.category').classList.toggle('collapsed');
         });
     });
-
-    // Bind events
     document.querySelectorAll('.layer-item input[type="checkbox"]').forEach(cb => {
         cb.addEventListener('change', e => {
             const alt = e.target.dataset.alt;
@@ -667,25 +678,10 @@ function renderLayersTab() {
             updateUrlState();
         });
     });
-    document.querySelectorAll('.layer-item .fit-btn').forEach(b => {
-        b.addEventListener('click', e => {
-            const alt = e.target.dataset.alt;
-            fitToLayer(state.layers.find(l => l.alternate === alt));
-        });
-    });
-    document.querySelectorAll('.layer-item .up-btn').forEach(b => {
-        b.addEventListener('click', e => moveLayerUp(e.target.dataset.alt));
-    });
-    document.querySelectorAll('.layer-item .dn-btn').forEach(b => {
-        b.addEventListener('click', e => moveLayerDown(e.target.dataset.alt));
-    });
-    document.querySelectorAll('.opacity-row input[type="range"]').forEach(r => {
-        r.addEventListener('input', e => {
-            const alt = e.target.dataset.alt;
-            setOpacity(alt, e.target.value / 100);
-        });
-    });
-    // Stepper temporal GFS
+    document.querySelectorAll('.layer-item .fit-btn').forEach(b => b.addEventListener('click', e => fitToLayer(state.layers.find(l => l.alternate === e.target.dataset.alt))));
+    document.querySelectorAll('.layer-item .up-btn').forEach(b => b.addEventListener('click', e => moveLayerUp(e.target.dataset.alt)));
+    document.querySelectorAll('.layer-item .dn-btn').forEach(b => b.addEventListener('click', e => moveLayerDown(e.target.dataset.alt)));
+    document.querySelectorAll('.opacity-row input[type="range"]').forEach(r => r.addEventListener('input', e => setOpacity(e.target.dataset.alt, e.target.value / 100)));
     document.getElementById('gfs-prev')?.addEventListener('click', () => changeGfsTime(-1));
     document.getElementById('gfs-next')?.addEventListener('click', () => changeGfsTime(1));
 }
@@ -1226,28 +1222,47 @@ window.addEventListener('resize', () => { chartPron?.resize(); chartProf?.resize
 // PESTAÑAS SUPERIORES (modos): Cartografía agrícola / Ortofoto / Multiespectral
 // El mapa es compartido; cada modo cambia el contenido del sidebar.
 // ============================================================================
+let currentMode = 'cartografia';
+const MODES = ['cartografia', 'ortofoto', 'multiespectral', 'meteorologia'];
+
 function setMode(mode) {
+    if (mode === currentMode) return;
+    removeTabLayers(currentMode);              // retira las capas de la pestaña que dejamos
+    currentMode = mode;
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
-    ['cartografia', 'ortofoto', 'multiespectral'].forEach(m =>
-        document.getElementById('mode-' + m).classList.toggle('active', m === mode));
-    if (mode === 'ortofoto') initOrtofotoMode();
+    MODES.forEach(m => document.getElementById('mode-' + m).classList.toggle('active', m === mode));
+    applyHaciendaToActiveTab();                // aplica la hacienda global a la nueva pestaña
     setTimeout(() => map.resize(), 60);
 }
 document.querySelectorAll('.mode-tab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
 
-// --- Modo Ortofoto: elegir hacienda -> mostrar su(s) ortofoto(s) + comparador ---
-let ortoBound = false;
+// Selector de hacienda GLOBAL (topbar): afecta a la pestaña activa y persiste al cambiar
+document.getElementById('global-hacienda').addEventListener('change', e => {
+    selectedHacienda = e.target.value;
+    applyHaciendaToActiveTab();
+});
+
+function applyHaciendaToActiveTab() {
+    const nombre = selectedHacienda;
+    if (currentMode === 'cartografia') selectHacienda(nombre);
+    else if (currentMode === 'ortofoto') showOrtoForHacienda(nombre);
+    else {  // meteorologia / multiespectral: solo encuadrar
+        const h = haciendas.find(x => x.nombre === nombre);
+        if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 60, maxZoom: 16 });
+        else fitHaciendasAll();
+    }
+}
+
+// Retira las capas que pertenecen a una pestaña (al salir de ella)
+function removeTabLayers(mode) {
+    if (mode === 'cartografia') { if (state.activeLayers[HACIENDAS_ALT]) removeWmsLayer(HACIENDAS_ALT); clearAutoRelated(); }
+    else if (mode === 'ortofoto') clearOrtoShown();
+    else if (mode === 'meteorologia') Object.keys(state.activeLayers).filter(a => a.startsWith('gfs:')).forEach(a => removeWmsLayer(a));
+}
+
+// --- Modo Ortofoto: estado ---
 let ortoShown = [];   // alternates de ortofotos mostradas por este modo
 let ortoList = [];    // ortofotos (raster) de la hacienda actual
-
-function initOrtofotoMode() {
-    const sel = document.getElementById('orto-hacienda');
-    if (haciendas.length && sel.options.length <= 1) {
-        sel.innerHTML = '<option value="">— Elige hacienda —</option>' +
-            haciendas.map(h => `<option value="${h.nombre}">${h.nombre}</option>`).join('');
-    }
-    if (!ortoBound) { sel.addEventListener('change', e => showOrtoForHacienda(e.target.value)); ortoBound = true; }
-}
 
 function clearOrtoShown() {
     ortoShown.forEach(a => { if (state.activeLayers[a]) removeWmsLayer(a); });

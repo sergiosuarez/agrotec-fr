@@ -4,6 +4,15 @@
 
 ---
 
+## 4ª pestaña Meteorología + selector de hacienda global — 2026-05-31
+
+- **Selector de hacienda GLOBAL** en la barra superior (arriba a la derecha): una sola selección afecta a TODAS las pestañas y persiste al cambiar de pestaña. Reemplaza los selectores por-pestaña (Cartografía y Ortofoto). `applyHaciendaToActiveTab()` aplica la hacienda a la pestaña activa: Cartografía → filtra lotes + carga vectores + zoom; Ortofoto → muestra su ortofoto/mosaico; Meteorología/Multiespectral → encuadra.
+- **Nueva pestaña 🌦 Meteorología**: las 5 capas WMS GFS + stepper temporal se movieron aquí (salieron de Cartografía). `renderLayersTab` ahora separa Cartografía (vectores, sin ortofotos ni meteo) de la pestaña Meteo (`renderMeteoTab` → `#meteo-layers`); bindings compartidos en `bindLayerControls()` (document-wide).
+- **Aislamiento por pestaña**: al cambiar de pestaña se retiran las capas de la pestaña anterior (`removeTabLayers`: Cartografía→lotes+vectores, Ortofoto→ortofotos, Meteo→capas gfs), así cada modo muestra solo lo suyo sobre el mapa compartido.
+- En Cartografía, "Todas" muestra todos los lotes por defecto al cargar. Sintaxis JS verificada con `node --check`.
+
+---
+
 ## Pestañas superiores (modos) + modo Ortofoto — 2026-05-31
 
 Reestructuración del visor a **barra superior de pestañas** (visión del Ing.): el mapa es compartido y cada pestaña cambia el contenido del sidebar.
