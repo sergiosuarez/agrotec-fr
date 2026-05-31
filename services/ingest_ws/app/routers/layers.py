@@ -66,7 +66,9 @@ def _categorize(alternate: str, subtype: str) -> str:
     """Heuristica simple por prefijo de nombre o subtype."""
     name = alternate.split(":", 1)[-1].lower()
     if subtype == "raster":
-        if any(p in name for p in ("ortho", "ortomos", "ap_temp", "drone", "rgb")):
+        # "cog"/"hcda" cubren las ortofotos comprimidas con el compresor (sufijo _cog,
+        # prefijo hcda_) cuyos nombres no siempre traen ortho/rgb/drone.
+        if any(p in name for p in ("ortho", "ortomos", "ap_temp", "drone", "rgb", "cog", "hcda")):
             return "ortomosaicos"
         return "raster_otros"
     # vector

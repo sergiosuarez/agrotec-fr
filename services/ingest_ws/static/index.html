@@ -422,16 +422,27 @@ function slug(s) {
         .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 }
 
-// Capas (vector/ortofoto) cuyo nombre corresponde a la hacienda dada. Empareja por el
-// slug COMPLETO de la hacienda (ej. "agricola_jose_fernando") para no confundir
-// "Agricola Jenny Elizabeth" con "Agricola Jenny Judith".
+// Palabras comunes a descartar del nombre de hacienda al emparejar capas.
+const HACIENDA_STOPWORDS = new Set(['agricola', 'hacienda', 'hcda', 'la', 'el', 'de', 'del', 'los', 'las']);
+
+// Tokens distintivos de una hacienda (ej. "Agricola Jenny Elizabeth" -> [jenny, elizabeth]).
+function distinctiveTokens(nombre) {
+    return slug(nombre).split('_').filter(t => t && !HACIENDA_STOPWORDS.has(t));
+}
+
+// Capas (vector/ortofoto) que corresponden a la hacienda dada. Empareja exigiendo que
+// TODOS los tokens distintivos de la hacienda aparezcan como tokens del nombre de la capa.
+// Así matchea nombres irregulares de ortofotos (amelia_rgb_final, hcda_sebastian_ortomosaico,
+// hcda_daniela_antonela) Y los vectoriales (lotes_agricola_amelia_actual), sin confundir
+// homónimas (Jenny Elizabeth vs Jenny Judith exigen ambos tokens).
 function relatedLayers(nombre) {
-    const hs = slug(nombre);
-    if (!hs) return [];
-    return state.layers.filter(l =>
-        l.alternate !== HACIENDAS_ALT &&
-        slug(l.alternate + ' ' + (l.title || '')).includes(hs)
-    );
+    const want = distinctiveTokens(nombre);
+    if (!want.length) return [];
+    return state.layers.filter(l => {
+        if (l.alternate === HACIENDAS_ALT) return false;
+        const toks = new Set(slug(l.alternate + ' ' + (l.title || '')).split('_'));
+        return want.every(t => toks.has(t));
+    });
 }
 
 // Quita las capas relacionadas que habíamos cargado automáticamente
@@ -498,6 +509,11 @@ function selectHacienda(nombre) {
         // 2) capas relacionadas (vectoriales / ortofotos) de esa hacienda, por nombre
         relatedLayers(nombre).forEach(l => {
             if (!state.activeLayers[l.alternate]) { addWmsLayer(l); autoRelated.push(l.alternate); }
+        });
+        // 2b) dejar los vectores (lotes/límites) por encima de las ortofotos raster
+        [HACIENDAS_ALT, ...autoRelated].forEach(alt => {
+            const info = state.activeLayers[alt];
+            if (info && info.subtype === 'vector' && map.getLayer(info.sourceId)) map.moveLayer(info.sourceId);
         });
         // 3) zoom a la hacienda
         const h = haciendas.find(x => x.nombre === nombre);
