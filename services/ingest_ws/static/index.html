@@ -229,7 +229,7 @@
                     <div id="chart-pron"></div>
                 </div>
                 <div id="chart-prof-wrap">
-                    <div id="chart-prof-title">Perfil vertical (+24h)</div>
+                    <div id="chart-prof-title">Perfil vertical</div>
                     <div id="chart-prof"></div>
                 </div>
             </div>
@@ -669,6 +669,15 @@ async function loadMeteoPron(lat, lng) {
         if (chartPron) chartPron.dispose();
         chartPron = echarts.init(el);
 
+        // Sincroniza el perfil vertical con el cursor temporal del pronostico:
+        // al mover el cursor sobre la serie de superficie, el perfil salta al tiempo mas cercano.
+        chartPron.on('updateAxisPointer', (ev) => {
+            const ts = ev?.axesInfo?.[0]?.value;
+            if (ts == null) return;
+            const idx = nearestProfIdx(ts);
+            if (idx !== profIdx) renderProfileAt(idx);
+        });
+
         // Datos para flechas viento: cada flecha es [t, y_constante, dir_rotation, speed]
         const windArrows = d.wind.map(([t, spd, dir]) => ({
             value: [t, 0],      // todas en y=0 del grid 1
@@ -755,6 +764,10 @@ async function loadMeteoPron(lat, lng) {
     }
 }
 
+// Estado del perfil vertical (multi-tiempo) para sincronizar con el cursor del pronostico
+let profData = null;     // { levels_hpa, times:[ms|null], profiles:[{t_celsius,rh_pct,wspd,wdir}], lat, lng }
+let profIdx = 0;         // indice de tiempo actualmente mostrado
+
 async function loadMeteoProf(lat, lng) {
     const el = document.getElementById('chart-prof');
     el.innerHTML = '<div class="panel-loading">cargando perfil vertical…</div>';
@@ -765,35 +778,91 @@ async function loadMeteoProf(lat, lng) {
             el.innerHTML = `<div class="panel-loading" style="color:#c00;">${e.detail || 'sin datos'}</div>`;
             return;
         }
-        const d = await r.json();
+        profData = await r.json();
         el.innerHTML = '';
         if (chartProf) chartProf.dispose();
         chartProf = echarts.init(el);
-        // Perfil vertical: niveles en eje Y (presion), valor en eje X
-        chartProf.setOption({
-            tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-            legend: { data: ['Temperatura (°C)', 'Humedad relativa (%)'], top: 4, textStyle: { fontSize: 11 }, itemGap: 12 },
-            // Margen superior generoso: legenda (16px) + nombre eje X-top "HR (%)" (12px) + aire (28px) = 56px
-            grid: { left: 60, right: 70, top: 70, bottom: 40 },
-            xAxis: [
-                { type: 'value', name: 'Temp (°C)', position: 'bottom', nameTextStyle: { fontSize: 10 }, axisLabel: { color: '#e74c3c', fontSize: 10 } },
-                { type: 'value', name: 'HR (%)',    position: 'top',    nameTextStyle: { fontSize: 10 }, nameGap: 22, axisLabel: { color: '#3498db', fontSize: 10 }, min: 0, max: 100 }
-            ],
-            yAxis: {
-                type: 'category',
-                name: 'Presión (hPa)',
-                inverse: false,   // 1000 abajo, 300 arriba (atmosferico real)
-                data: d.levels_hpa.map(String),
-                axisLabel: { fontSize: 11 }
-            },
-            series: [
-                { name: 'Temperatura (°C)', type: 'line', xAxisIndex: 0, data: d.t_celsius.map((v, i) => [v, String(d.levels_hpa[i])]), symbol: 'circle', symbolSize: 8, itemStyle: { color: '#e74c3c' }, lineStyle: { width: 2 } },
-                { name: 'Humedad relativa (%)', type: 'line', xAxisIndex: 1, data: d.rh_pct.map((v, i) => [v, String(d.levels_hpa[i])]), symbol: 'diamond', symbolSize: 8, itemStyle: { color: '#3498db' }, lineStyle: { width: 2 } }
-            ]
-        });
+        profIdx = 0;
+        renderProfileAt(0);
     } catch (err) {
         el.innerHTML = `<div class="panel-loading" style="color:#c00;">Error: ${err.message}</div>`;
     }
+}
+
+// Encuentra el indice de tiempo del perfil mas cercano a un timestamp (ms)
+function nearestProfIdx(ts) {
+    if (!profData?.times?.length || profData.times[0] == null) return 0;
+    let best = 0, bestD = Infinity;
+    profData.times.forEach((t, i) => { const d = Math.abs(t - ts); if (d < bestD) { bestD = d; best = i; } });
+    return best;
+}
+
+// Renderiza el perfil vertical (T, HR, viento por nivel) para el indice de tiempo dado
+function renderProfileAt(idx) {
+    if (!profData || !chartProf) return;
+    const p = profData.profiles?.[idx];
+    if (!p) return;
+    profIdx = idx;
+    const levels = profData.levels_hpa;
+    const ts = profData.times?.[idx];
+
+    // Titulo: hora del perfil sincronizada con el pronostico (o fallback)
+    const titleEl = document.getElementById('chart-prof-title');
+    titleEl.textContent = ts ? `Perfil vertical — ${new Date(ts).toLocaleString()}` : 'Perfil vertical';
+
+    const hasWind = p.wspd?.length === levels.length;
+    // Columna de viento en su propio grid (a la derecha) para no encimar las lineas T/HR.
+    // Flecha: misma convencion que el pronostico (symbolRotate desde el norte).
+    const windData = hasWind ? levels.map((lv, i) => ({
+        value: [0.5, String(lv)],
+        symbolRotate: p.wdir[i],
+        symbolSize: Math.max(11, Math.min(26, 11 + p.wspd[i] * 1.6)),
+        itemStyle: { color: '#16a085' }
+    })) : [];
+
+    const legendData = ['Temperatura (°C)', 'Humedad relativa (%)'];
+    if (hasWind) legendData.push('Viento (m/s)');
+
+    chartProf.setOption({
+        tooltip: {
+            trigger: 'axis', axisPointer: { type: 'line' },
+            formatter: (params) => {
+                if (!params.length) return '';
+                const lv = params[0].axisValue;   // nivel hPa (category)
+                const i = levels.findIndex(x => String(x) === String(lv));
+                if (i < 0) return '';
+                let html = `<b>${lv} hPa</b><br>`;
+                if (p.t_celsius[i] != null) html += `🌡 ${p.t_celsius[i]} °C<br>`;
+                if (p.rh_pct[i] != null)    html += `💧 ${p.rh_pct[i]} %<br>`;
+                if (hasWind) html += `🌬 ${p.wspd[i].toFixed(1)} m/s · ${p.wdir[i].toFixed(0)}°`;
+                return html;
+            }
+        },
+        legend: { data: legendData, top: 4, textStyle: { fontSize: 10 }, itemGap: 8 },
+        // grid 0 = lineas T/HR; grid 1 = columna de flechas de viento
+        grid: [
+            { left: 52, right: '32%', top: 70, bottom: 40 },
+            { left: '74%', right: 14, top: 70, bottom: 40 }
+        ],
+        xAxis: [
+            { type: 'value', gridIndex: 0, name: 'Temp (°C)', position: 'bottom', nameTextStyle: { fontSize: 10 }, axisLabel: { color: '#e74c3c', fontSize: 10 } },
+            { type: 'value', gridIndex: 0, name: 'HR (%)',    position: 'top',    nameTextStyle: { fontSize: 10 }, nameGap: 22, axisLabel: { color: '#3498db', fontSize: 10 }, min: 0, max: 100 },
+            { type: 'value', gridIndex: 1, name: 'Viento', position: 'top', nameTextStyle: { fontSize: 10, color: '#16a085' }, nameGap: 22, min: 0, max: 1, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
+        ],
+        yAxis: [
+            { type: 'category', gridIndex: 0, name: 'Presión (hPa)', inverse: false, data: levels.map(String), axisLabel: { fontSize: 11 } },
+            { type: 'category', gridIndex: 1, inverse: false, data: levels.map(String), axisLabel: { show: false }, axisTick: { show: false } }
+        ],
+        series: [
+            { name: 'Temperatura (°C)', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: p.t_celsius.map((v, i) => [v, String(levels[i])]), symbol: 'circle', symbolSize: 8, itemStyle: { color: '#e74c3c' }, lineStyle: { width: 2 } },
+            { name: 'Humedad relativa (%)', type: 'line', xAxisIndex: 1, yAxisIndex: 0, data: p.rh_pct.map((v, i) => [v, String(levels[i])]), symbol: 'diamond', symbolSize: 8, itemStyle: { color: '#3498db' }, lineStyle: { width: 2 } },
+            {
+                name: 'Viento (m/s)', type: 'scatter', xAxisIndex: 2, yAxisIndex: 1, data: windData,
+                symbol: 'path://M 50 0 L 90 80 L 50 60 L 10 80 Z',
+                label: { show: true, position: 'right', formatter: (pt) => hasWind ? p.wspd[pt.dataIndex].toFixed(0) : '', fontSize: 8, color: '#0b6e5a', fontWeight: 'bold' }
+            }
+        ]
+    });
 }
 
 // Sidebar colapsable

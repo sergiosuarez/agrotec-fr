@@ -95,7 +95,16 @@ def gfs_profile(
     lat: float = Query(..., ge=-90, le=90),
     lng: float = Query(..., ge=-180, le=180),
 ) -> dict:
-    """Perfil vertical GFS para un punto: T y RH en 6 niveles de presion."""
+    """Perfil vertical GFS para un punto, en TODOS los pasos temporales.
+
+    Devuelve T, RH y viento (velocidad+direccion) por nivel de presion, un perfil
+    por cada `valid_time`, para que el visor pueda sincronizar el perfil mostrado
+    con el cursor temporal del pronostico de superficie.
+
+    Robusto al formato antiguo (snapshot unico f024, solo t/r sin viento): en ese
+    caso `times` trae un solo elemento y wspd/wdir quedan vacios.
+    """
+    import pandas as pd
     import xarray as xr
 
     _, vert_path = _gfs_paths()
@@ -105,20 +114,47 @@ def gfs_profile(
     ds = xr.open_dataset(str(vert_path))
     lon_360 = lng % 360
     pt = ds.sel(latitude=lat, longitude=lon_360, method="nearest")
-    # Colapsar dimension temporal (perfil es snapshot f024)
-    if "valid_time" in pt.dims:
-        pt = pt.isel(valid_time=0)
 
     levels = [int(p) for p in pt.isobaricInhPa.values]   # [1000, 925, 850, 700, 500, 300]
+    nlev = len(levels)
 
-    # .flatten() porque a veces queda [1, 6] aunque isel(valid_time=0)
-    temp = [round(float(v) - 273.15, 2) for v in pt["t"].values.flatten()]
-    rh = [round(float(v), 1) for v in pt["r"].values.flatten()] if "r" in pt else []
+    has_time_dim = "valid_time" in pt.dims
+    if "valid_time" in pt.coords:
+        vt = np.atleast_1d(pt.valid_time.values)
+        times = [int(pd.Timestamp(t).value // 1_000_000) for t in vt]
+    else:
+        times = [None]
+    ntime = len(times) if has_time_dim else 1
+
+    def _at(var: str, i: int) -> np.ndarray | None:
+        if var not in pt:
+            return None
+        arr = pt[var]
+        if has_time_dim:
+            arr = arr.isel(valid_time=i)
+        return np.asarray(arr.values).flatten()
+
+    profiles = []
+    for i in range(ntime):
+        t = _at("t", i)
+        r = _at("r", i)
+        u = _at("u", i)
+        v = _at("v", i)
+        t_c = [round(float(x) - 273.15, 2) for x in t] if t is not None else []
+        rh = [round(float(x), 1) for x in r] if r is not None else []
+        wspd: list[float] = []
+        wdir: list[float] = []
+        if u is not None and v is not None:
+            for j in range(nlev):
+                uu, vv = float(u[j]), float(v[j])
+                wspd.append(round(float(np.sqrt(uu**2 + vv**2)), 2))
+                wdir.append(round(float((270 - np.degrees(np.arctan2(vv, uu))) % 360), 1))
+        profiles.append({"t_celsius": t_c, "rh_pct": rh, "wspd": wspd, "wdir": wdir})
 
     return {
         "lat": round(float(pt.latitude.values), 4),
         "lng": round(float(pt.longitude.values) - 360 if float(pt.longitude.values) > 180 else float(pt.longitude.values), 4),
         "levels_hpa": levels,
-        "t_celsius": temp,
-        "rh_pct": rh,
+        "times": times,        # ms epoch (alineado con /point.times); [null] si formato viejo
+        "profiles": profiles,  # un perfil por time: {t_celsius, rh_pct, wspd, wdir}
     }

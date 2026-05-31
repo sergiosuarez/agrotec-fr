@@ -8,7 +8,10 @@ NetCDF resultantes en un volumen compartido con `agrotec_thredds`.
 Salida:
   ${GFS_DIR}/modelos/gfspgrb20p25.nc       — superficie (t2m, r2, u10, v10, prate, sdswrf)
                                               f003..f120 cada 3h (40 pasos)
-  ${GFS_DIR}/modelos/gfspgrb20p25_vert.nc  — perfil vertical (t, r) niveles de presion @ f024
+  ${GFS_DIR}/modelos/gfspgrb20p25_vert.nc  — perfil vertical (t, r, u, v) en 6 niveles de
+                                              presion, f003..f120 cada 3h (40 pasos), para
+                                              poder sincronizar el perfil con el cursor temporal
+                                              del pronostico y mostrar viento por altura.
 """
 from __future__ import annotations
 
@@ -38,7 +41,7 @@ HTTP_TIMEOUT  = 120
 
 # Variables que conservamos al filtrar los datasets cfgrib
 SURF_KEEP = {"u10", "v10", "t2m", "r2", "prate", "sdswrf"}
-VERT_KEEP = {"t", "r"}
+VERT_KEEP = {"t", "r", "u", "v"}
 
 
 def latest_gfs_run() -> tuple[str, str] | None:
@@ -188,11 +191,13 @@ def descargar_gfs() -> str:
         output_path=GFS_MODELS / "gfspgrb20p25.nc",
     )
 
-    # Perfil vertical: f024 a 6 niveles de presion
+    # Perfil vertical: f003..f120 cada 3h (40 pasos) a 6 niveles de presion,
+    # con viento (UGRD/VGRD) ademas de T y RH. Multi-tiempo para sincronizar el
+    # perfil con el cursor del pronostico de superficie.
     ok_vert = _build_netcdf(
         date_str, hour_str,
-        forecast_hours=[24],
-        variables=["TMP", "RH"],
+        forecast_hours=list(range(3, 121, 3)),
+        variables=["TMP", "RH", "UGRD", "VGRD"],
         levels=["1000_mb", "925_mb", "850_mb", "700_mb", "500_mb", "300_mb"],
         keep_vars=VERT_KEEP,
         output_path=GFS_MODELS / "gfspgrb20p25_vert.nc",

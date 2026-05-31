@@ -4,6 +4,25 @@
 
 ---
 
+## Perfil vertical: viento por altura + sincronizado al cursor — 2026-05-31
+
+El perfil vertical dejó de ser un snapshot fijo a +24h con solo T/HR. Ahora muestra **viento por altura** y se **sincroniza con el cursor temporal** del pronóstico de superficie.
+
+### Pipeline GFS (`services/gfs_scheduler/download_gfs.py`)
+
+- `gfspgrb20p25_vert.nc` ahora baja **f003..f120 cada 3h (40 pasos)** en vez de solo f024, y agrega **UGRD/VGRD** (viento) a los 6 niveles de presión además de TMP/RH. `VERT_KEEP = {t, r, u, v}`.
+
+### API (`services/ingest_ws/app/routers/gfs.py`)
+
+- `GET /api/v1/gfs/profile` reestructurado: devuelve `times[]` (40, alineados con `/point`) y `profiles[]`, un perfil por tiempo con `t_celsius`, `rh_pct`, `wspd`, `wdir` por nivel. Calcula velocidad/dirección desde u/v igual que en superficie. Robusto al formato viejo (snapshot único sin viento → `times=[ts]`, wspd/wdir vacíos).
+
+### Frontend (`services/ingest_ws/static/index.html`)
+
+- El perfil se descarga una vez (todos los tiempos) y se cachea (`profData`); al mover el cursor sobre el gráfico de pronóstico (`updateAxisPointer`) salta al perfil del tiempo más cercano (`nearestProfIdx` → `renderProfileAt`), sin refetch. El título muestra la fecha/hora del perfil mostrado.
+- Viento por nivel en una **columna propia (grid separado a la derecha)**: flechas rotadas por dirección, tamaño por velocidad, etiqueta con m/s. Tooltip por nivel con T/HR/viento.
+
+---
+
 ## Capas WMS de GFS en el sidebar — 2026-05-31
 
 Las variables del modelo GFS (descargadas por `agrotec_gfs_scheduler` y servidas por THREDDS/ncWMS) ahora son **capas activables** en el geovisor, no solo accesibles vía clic puntual.
