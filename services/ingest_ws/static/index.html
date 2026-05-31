@@ -197,6 +197,8 @@
                     <h2>Mapa base</h2>
                     <div class="layer-item"><input type="radio" name="basemap" id="bm-osm" value="osm" checked><label class="name" for="bm-osm">OpenStreetMap</label></div>
                     <div class="layer-item"><input type="radio" name="basemap" id="bm-sat" value="esri-sat"><label class="name" for="bm-sat">Satélite (Esri)</label></div>
+                    <div class="layer-item"><input type="radio" name="basemap" id="bm-gsat" value="google-sat"><label class="name" for="bm-gsat">Satélite (Google)</label></div>
+                    <div class="layer-item"><input type="radio" name="basemap" id="bm-ghyb" value="google-hybrid"><label class="name" for="bm-ghyb">Híbrido (Google)</label></div>
                     <div class="layer-item"><input type="radio" name="basemap" id="bm-light" value="cartolight"><label class="name" for="bm-light">Mapa claro (Carto)</label></div>
                 </div>
             </div>
@@ -288,6 +290,8 @@ const DEFAULT_ZOOM = 6;
 const BASEMAPS = {
     osm:        { tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], attr: '© OpenStreetMap' },
     'esri-sat': { tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], attr: '© Esri, Maxar' },
+    'google-sat': { tiles: ['https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}','https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}','https://mt2.google.com/vt/lyrs=s&x={x}&y={y}&z={z}','https://mt3.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'], attr: '© Google' },
+    'google-hybrid': { tiles: ['https://mt0.google.com/vt/lyrs=y&x={x}&y={y}&z={z}','https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}','https://mt2.google.com/vt/lyrs=y&x={x}&y={y}&z={z}','https://mt3.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'], attr: '© Google' },
     cartolight: { tiles: ['https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'], attr: '© Carto' }
 };
 function basemapStyle(key) {

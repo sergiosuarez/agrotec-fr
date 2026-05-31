@@ -4,6 +4,14 @@
 
 ---
 
+## Estilo de lotes, basemaps Google y rename "Lotes Palmar" — 2026-05-31
+
+- **Estilo SLD de los lotes** (GeoServer): la capa `geonode:haciendas_palmar` usaba el estilo `polygon` por defecto (relleno gris) que tapaba la ortofoto. Se creó el estilo `lote_borde_verde` y se asignó como default. Iteración: primero borde verde claro `#9BE564` (no se veía bien sobre OSM) → final **línea oscura `#111418` con halo blanco** (doble PolygonSymbolizer: casing blanco 3.5px op .55 + línea 1.4px) y **sin relleno** → buen contraste sobre ortofoto y sobre OSM. SLD versionado en `bk/styles/lote_borde.sld`. Aplica también a la versión filtrada por hacienda (CQL).
+- **Basemaps Google** (`static/index.html`): agregados **Satélite (Google)** (`lyrs=s`) e **Híbrido (Google)** (`lyrs=y`) a `BASEMAPS` + radios en la pestaña Mapa base. Subdominios mt0–mt3 para paralelizar tiles.
+- **Rename a "Lotes Palmar"**: el recurso `haciendas_palmar` son en realidad LOTES (pronto subirán las haciendas reales). Se cambió SOLO el **título** del dataset en GeoNode a "Lotes Palmar" (el identificador/alternate `geonode:haciendas_palmar` y la tabla se mantienen — el código los referencia). GOTCHA: cambiar el título con `ResourceBase.objects.filter().update()` NO invalida la caché del API de GeoNode (el API seguía sirviendo el viejo); hay que usar `Dataset.objects.get(pk).save()` (dispara signals + invalida caché).
+
+---
+
 ## Compresor de ortofotos a COG-JPEG — 2026-05-31
 
 Servicio dentro del visor para comprimir ortomosaicos GeoTIFF pesados a COG-JPEG (lo que antes se hacía manual con GlobalMapper). Habilita cargar ortofotos grandes por GeoNode sin subir los 3 GB originales.
