@@ -420,11 +420,7 @@ async function loadHaciendas() {
         const r = await fetch(`${API}/api/v1/haciendas/extents`);
         const d = await r.json();
         haciendas = Array.isArray(d) ? d : [];
-    } catch (e) { haciendas = []; return; }
-    // Zoom inicial al extent de TODAS las haciendas (salvo que la URL traiga vista)
-    const params = new URLSearchParams(location.search);
-    if (!params.get('lat') && haciendas.length) fitHaciendasAll();
-    renderLayersTab();
+    } catch (e) { haciendas = []; }
 }
 
 function haciendasGlobalBounds() {
@@ -483,15 +479,23 @@ async function loadAll() {
         const r = await fetch(`${API}/api/v1/layers`);
         state.layers = await r.json();
         await loadGfsTimes();   // antes de activar featured, para que las capas GFS salgan con el paso correcto
+        await loadHaciendas();  // carga el catalogo de haciendas (sin encuadrar todavia)
         renderLayersTab();
         // Activar las featured automáticamente
         state.layers.filter(l => l.featured).forEach(l => addWmsLayer(l));
-        if (state.layers.some(l => l.featured)) fitToFeatured();
+        // Restaurar capas de un link compartido (param l), si vienen
+        parseUrlLayers();
+        // Vista inicial determinista: vista de link compartido > extent de haciendas > featured.
+        // (updateUrlState ya NO persiste la vista en cada movimiento; solo el boton Compartir
+        //  pone lat/lng en la URL, asi que un load normal siempre encuadra las haciendas.)
+        if (!parseUrlView()) {
+            if (haciendas.length) fitHaciendasAll();
+            else if (state.layers.some(l => l.featured)) fitToFeatured();
+        }
     } catch (e) {
         document.getElementById('tab-layers').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
     }
-    loadHealth(); loadGFS(); loadHaciendas();
-    parseUrlState();
+    loadHealth(); loadGFS();
 }
 
 function renderLayersTab() {
@@ -745,7 +749,38 @@ document.getElementById('btn-fit-all').addEventListener('click', () => {
 document.getElementById('btn-reset').addEventListener('click', () => map.flyTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }));
 
 // --- URL state (compartir vista) ---
+// Persiste SOLO las capas activas en la URL (no la vista). Asi el load normal siempre
+// encuadra las haciendas; la vista solo se comparte explicitamente con el boton Compartir.
 function updateUrlState() {
+    const params = new URLSearchParams();
+    const active = Object.keys(state.activeLayers);
+    if (active.length) params.set('l', active.join(','));
+    const qs = params.toString();
+    history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+}
+// Restaura las capas del param `l` (link compartido). Devuelve true si habia capas.
+function parseUrlLayers() {
+    const ls = new URLSearchParams(location.search).get('l');
+    if (!ls) return false;
+    ls.split(',').forEach(alt => {
+        const l = state.layers.find(x => x.alternate === alt);
+        if (l && !state.activeLayers[alt]) addWmsLayer(l);
+    });
+    return true;
+}
+// Aplica la vista (centro/zoom) SOLO si es un link compartido (marcador s=1 que pone el
+// boton Compartir). Asi las URLs viejas con lat/lng quedan ignoradas y se encuadra haciendas.
+function parseUrlView() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('s') !== '1') return false;
+    const z = parseFloat(params.get('z')), lat = parseFloat(params.get('lat')), lng = parseFloat(params.get('lng'));
+    if (!isNaN(z) && !isNaN(lat) && !isNaN(lng)) { map.jumpTo({ center: [lng, lat], zoom: z }); return true; }
+    return false;
+}
+map.on('moveend', updateUrlState);
+
+document.getElementById('btn-share').addEventListener('click', () => {
+    // Construye una URL compartible CON la vista actual (centro/zoom) + capas activas.
     const params = new URLSearchParams();
     const active = Object.keys(state.activeLayers);
     if (active.length) params.set('l', active.join(','));
@@ -753,25 +788,9 @@ function updateUrlState() {
     params.set('z', map.getZoom().toFixed(2));
     params.set('lat', c.lat.toFixed(5));
     params.set('lng', c.lng.toFixed(5));
-    history.replaceState(null, '', '?' + params.toString());
-}
-function parseUrlState() {
-    const params = new URLSearchParams(location.search);
-    const ls = params.get('l');
-    if (ls) {
-        ls.split(',').forEach(alt => {
-            const l = state.layers.find(x => x.alternate === alt);
-            if (l && !state.activeLayers[alt]) addWmsLayer(l);
-        });
-    }
-    const z = parseFloat(params.get('z')), lat = parseFloat(params.get('lat')), lng = parseFloat(params.get('lng'));
-    if (!isNaN(z) && !isNaN(lat) && !isNaN(lng)) map.jumpTo({ center: [lng, lat], zoom: z });
-}
-map.on('moveend', updateUrlState);
-
-document.getElementById('btn-share').addEventListener('click', () => {
-    updateUrlState();
-    navigator.clipboard.writeText(location.href).then(() => alert('URL copiada al portapapeles\n\n' + location.href));
+    params.set('s', '1');   // marcador de "vista compartida" (la respeta parseUrlView al abrir)
+    const url = location.origin + location.pathname + '?' + params.toString();
+    navigator.clipboard.writeText(url).then(() => alert('URL copiada al portapapeles\n\n' + url));
 });
 
 // --- Admin modal ---
