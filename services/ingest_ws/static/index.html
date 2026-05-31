@@ -19,8 +19,24 @@
         }
         * { box-sizing: border-box; }
         html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); font-size: 14px; }
-        #app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; transition: grid-template-columns .25s ease; }
+        /* --- SHELL: barra superior de pestañas + área de app --- */
+        #shell { display: flex; flex-direction: column; height: 100vh; }
+        #topbar { display: flex; align-items: stretch; background: var(--palmar-green-dark); color: #fff; flex: 0 0 50px; box-shadow: 0 2px 6px rgba(0,0,0,.2); z-index: 10; }
+        #topbar .brand { display: flex; align-items: center; gap: 8px; padding: 0 18px; font-weight: 700; font-size: 1.05rem; background: var(--palmar-green); white-space: nowrap; }
+        #topbar .modes { display: flex; align-items: stretch; }
+        .mode-tab { display: flex; align-items: center; gap: 6px; padding: 0 22px; cursor: pointer; font-size: .9rem; color: #ffffffcc; border-bottom: 3px solid transparent; user-select: none; }
+        .mode-tab:hover { background: #ffffff14; }
+        .mode-tab.active { color: #fff; font-weight: 600; border-bottom-color: var(--palmar-red); background: #ffffff1f; }
+
+        #app { display: grid; grid-template-columns: 340px 1fr; flex: 1; min-height: 0; position: relative; transition: grid-template-columns .25s ease; }
         #app.sidebar-collapsed { grid-template-columns: 0 1fr; }
+        /* paneles de modo en el sidebar: solo uno visible */
+        .mode-panel { display: none; }
+        .mode-panel.active { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+        .mode-scroll { flex: 1; overflow-y: auto; padding: 10px 12px; }
+        .mode-intro { font-size: .8rem; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+        .coming-soon { text-align: center; color: var(--muted); padding: 30px 14px; font-size: .85rem; line-height: 1.6; }
+        .coming-soon .big { font-size: 2rem; }
 
         /* --- SIDEBAR --- */
         #sidebar { background: var(--bg); border-right: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; }
@@ -44,6 +60,18 @@
         .hacienda-selector label { display: block; font-size: .7rem; color: #ffffffcc; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
         .hacienda-selector select { width: 100%; padding: 6px 8px; border: 1px solid var(--palmar-green-dark); border-radius: 4px; font-size: .85rem; background: white; color: var(--text); cursor: pointer; }
         .hacienda-selector select:focus { outline: 2px solid #fff8; }
+
+        /* Controles del modo Ortofoto / Multiespectral */
+        .of-label { display: block; font-size: .72rem; font-weight: 600; color: var(--palmar-green-dark); text-transform: uppercase; letter-spacing: .04em; margin: 10px 0 5px; }
+        #orto-hacienda, #multi-index { width: 100%; padding: 7px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: .85rem; background: #fff; color: var(--text); cursor: pointer; }
+        .of-card { background: #fff; border: 1px solid var(--border); border-left: 3px solid var(--palmar-green); border-radius: 5px; padding: 8px 10px; margin: 8px 0; }
+        .of-card .of-name { font-size: .85rem; font-weight: 600; word-break: break-word; }
+        .of-card .of-meta { font-size: .7rem; color: var(--muted); margin: 2px 0 6px; }
+        .of-hint { font-size: .72rem; color: var(--muted); background: #f4f8f2; border: 1px dashed var(--border); border-radius: 4px; padding: 8px; margin-top: 8px; }
+        .of-btn { width: 100%; background: var(--palmar-green); color: #fff; border: none; padding: 8px; border-radius: 5px; cursor: pointer; font-size: .85rem; font-weight: 600; margin-bottom: 10px; }
+        .of-btn:hover { background: var(--palmar-green-dark); }
+        .of-card { cursor: pointer; }
+        .of-card.sel { border-left-color: var(--palmar-red); background: #f0f7ee; }
 
         #sidebar-search { padding: 8px 12px; background: white; border-bottom: 1px solid var(--border); }
         #sidebar-search input { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: .9rem; }
@@ -173,13 +201,18 @@
     </style>
 </head>
 <body>
-<div id="app">
-    <aside id="sidebar">
-        <div id="sidebar-header">
-            <h1>🌱 IDEPalma</h1>
-            <div class="subtitle">Geovisor Corporación PALMAR</div>
+<div id="shell">
+    <div id="topbar">
+        <div class="brand">🌱 IDEPalma</div>
+        <div class="modes">
+            <div class="mode-tab active" data-mode="cartografia">🗺 Cartografía agrícola</div>
+            <div class="mode-tab" data-mode="ortofoto">🛩 Ortofoto Haciendas</div>
+            <div class="mode-tab" data-mode="multiespectral">🌈 Multiespectral</div>
         </div>
-
+    </div>
+    <div id="app">
+    <aside id="sidebar">
+        <div id="mode-cartografia" class="mode-panel active">
         <div id="sidebar-search">
             <input id="search-input" type="text" placeholder="🔍 Buscar capa por nombre…">
         </div>
@@ -210,6 +243,38 @@
                 <div class="category">
                     <h2>Meteorología GFS</h2>
                     <div id="gfs-box"><div class="loading">cargando…</div></div>
+                </div>
+            </div>
+        </div>
+        </div><!-- /#mode-cartografia -->
+
+        <!-- ===== Modo: Ortofoto Haciendas ===== -->
+        <div id="mode-ortofoto" class="mode-panel">
+            <div class="mode-scroll">
+                <div class="mode-intro">Ortofotos por hacienda. Elige una hacienda para ver su ortofoto; con el comparador puedes deslizar entre dos fechas (cuando haya más de una).</div>
+                <label class="of-label">🏞 Hacienda</label>
+                <select id="orto-hacienda"><option value="">— Elige hacienda —</option></select>
+                <div id="orto-body"><div class="empty">Elige una hacienda para ver su ortofoto.</div></div>
+            </div>
+        </div>
+
+        <!-- ===== Modo: Multiespectral (placeholder) ===== -->
+        <div id="mode-multiespectral" class="mode-panel">
+            <div class="mode-scroll">
+                <div class="coming-soon">
+                    <div class="big">🌈</div>
+                    <p><b>Análisis multiespectral</b></p>
+                    <p>Índices de vegetación a partir de ortofotos con banda NIR / RedEdge.</p>
+                    <label class="of-label" style="text-align:left">Índice</label>
+                    <select id="multi-index" disabled>
+                        <option>NDVI — (NIR−Red)/(NIR+Red)</option>
+                        <option>NDRE — (NIR−RedEdge)/(NIR+RedEdge)</option>
+                        <option>GNDVI — (NIR−Green)/(NIR+Green)</option>
+                        <option>SAVI — 1.5(NIR−Red)/(NIR+Red+0.5)</option>
+                        <option>OSAVI — (NIR−Red)/(NIR+Red+0.16)</option>
+                        <option>VARI — (G−R)/(G+R−B) [solo RGB]</option>
+                    </select>
+                    <p style="color:#999;margin-top:14px;">Próximamente — pendiente de procesar la cámara multiespectral. El cálculo se hará con las fórmulas de WebODM (rasterio + numexpr) cuando haya imágenes con banda NIR.</p>
                 </div>
             </div>
         </div>
@@ -252,7 +317,8 @@
             </div>
         </div>
     </main>
-</div>
+    </div><!-- /#app -->
+</div><!-- /#shell -->
 
 <!-- Admin modal -->
 <div id="admin-overlay">
@@ -1153,6 +1219,61 @@ map.on('click', e => {
 
 // Resize charts al cambiar tamaño ventana
 window.addEventListener('resize', () => { chartPron?.resize(); chartProf?.resize(); });
+
+// ============================================================================
+// PESTAÑAS SUPERIORES (modos): Cartografía agrícola / Ortofoto / Multiespectral
+// El mapa es compartido; cada modo cambia el contenido del sidebar.
+// ============================================================================
+function setMode(mode) {
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+    ['cartografia', 'ortofoto', 'multiespectral'].forEach(m =>
+        document.getElementById('mode-' + m).classList.toggle('active', m === mode));
+    if (mode === 'ortofoto') initOrtofotoMode();
+    setTimeout(() => map.resize(), 60);
+}
+document.querySelectorAll('.mode-tab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+
+// --- Modo Ortofoto: elegir hacienda -> mostrar su(s) ortofoto(s) + comparador ---
+let ortoBound = false;
+let ortoShown = [];   // alternates de ortofotos mostradas por este modo
+let ortoList = [];    // ortofotos (raster) de la hacienda actual
+
+function initOrtofotoMode() {
+    const sel = document.getElementById('orto-hacienda');
+    if (haciendas.length && sel.options.length <= 1) {
+        sel.innerHTML = '<option value="">— Elige hacienda —</option>' +
+            haciendas.map(h => `<option value="${h.nombre}">${h.nombre}</option>`).join('');
+    }
+    if (!ortoBound) { sel.addEventListener('change', e => showOrtoForHacienda(e.target.value)); ortoBound = true; }
+}
+
+function clearOrtoShown() {
+    ortoShown.forEach(a => { if (state.activeLayers[a]) removeWmsLayer(a); });
+    ortoShown = [];
+}
+
+function showOrtoForHacienda(nombre) {
+    clearOrtoShown();
+    const body = document.getElementById('orto-body');
+    if (!nombre) { body.innerHTML = '<div class="empty">Elige una hacienda para ver su ortofoto.</div>'; return; }
+    const h = haciendas.find(x => x.nombre === nombre);
+    if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 50, maxZoom: 18 });
+    ortoList = relatedLayers(nombre).filter(l => l.subtype === 'raster');
+    if (!ortoList.length) { body.innerHTML = '<div class="empty">No hay ortofoto cargada para esta hacienda todavía.</div>'; return; }
+    // Mostrar TODAS las piezas juntas: forman el mosaico de la ortofoto de la hacienda
+    // (varias piezas = un solo vuelo que no se unió por tamaño, NO fechas distintas).
+    ortoList.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });
+    const multi = ortoList.length > 1;
+    body.innerHTML =
+        `<div class="of-label">Ortofoto${multi ? ` — mosaico (${ortoList.length} piezas)` : ''}</div>` +
+        ortoList.map(o => `<div class="of-card"><div class="of-name">${o.title}</div><div class="of-meta">${o.alternate.split(':').pop()}</div></div>`).join('') +
+        `<div class="opacity-row" style="padding-left:0"><span>opacidad</span><input type="range" id="orto-op" min="0" max="100" value="100"></div>` +
+        (multi ? '<div class="of-hint">Esta hacienda tiene varias piezas que forman un solo mosaico (no se unieron por tamaño). Se muestran juntas.</div>' : '') +
+        '<div class="of-hint">🕓 El comparador temporal entre fechas se habilitará cuando subas vuelos de fechas distintas (campo <b>Date</b> en GeoNode).</div>';
+    // una sola opacidad controla todas las piezas
+    document.getElementById('orto-op').addEventListener('input', e =>
+        ortoShown.forEach(a => setOpacity(a, e.target.value / 100)));
+}
 
 // --- GO ---
 map.on('load', loadAll);

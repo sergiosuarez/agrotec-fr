@@ -4,6 +4,18 @@
 
 ---
 
+## Pestañas superiores (modos) + modo Ortofoto — 2026-05-31
+
+Reestructuración del visor a **barra superior de pestañas** (visión del Ing.): el mapa es compartido y cada pestaña cambia el contenido del sidebar.
+
+- **Shell**: nuevo `#shell` (topbar + `#app`). Topbar con marca IDEPalma + 3 pestañas de modo: **🗺 Cartografía agrícola**, **🛩 Ortofoto Haciendas**, **🌈 Multiespectral**. `setMode()` muestra el `.mode-panel` activo y hace `map.resize()`.
+- **Cartografía agrícola**: el visor actual completo (selector de hacienda, capas categorizadas incl. Ortomosaicos y Meteorología GFS, mapa base, estado). Sin cambios de comportamiento.
+- **Ortofoto Haciendas**: selector de hacienda → muestra su ortofoto. Si la hacienda tiene **varias piezas** (p.ej. `jenny_elizabeth_s2/s3/s4`), se muestran **juntas como mosaico** (son trozos de un mismo vuelo que no se unió por tamaño, NO fechas distintas — aclaración del usuario). Una sola opacidad controla todas las piezas. El **comparador temporal** entre fechas queda pendiente para cuando haya vuelos de fechas distintas (campo Date en GeoNode).
+- **Multiespectral**: placeholder con selector de índices (NDVI/NDRE/GNDVI/SAVI/OSAVI/VARI) deshabilitado; se calcularán con fórmulas de WebODM (rasterio+numexpr) cuando haya imágenes con banda NIR.
+- Match de ortofotos por tokens verificado con las reales: Jenny Elizabeth→3 piezas, Darwin Andres 1 vs 2 separados, Daniela vs Daniel Alejandro sin cruce.
+
+---
+
 ## Estilo de lotes, basemaps Google y rename "Lotes Palmar" — 2026-05-31
 
 - **Estilo SLD de los lotes** (GeoServer): la capa `geonode:haciendas_palmar` usaba el estilo `polygon` por defecto (relleno gris) que tapaba la ortofoto. Se creó el estilo `lote_borde_verde` y se asignó como default. Iteración: primero borde verde claro `#9BE564` (no se veía bien sobre OSM) → final **línea oscura `#111418` con halo blanco** (doble PolygonSymbolizer: casing blanco 3.5px op .55 + línea 1.4px) y **sin relleno** → buen contraste sobre ortofoto y sobre OSM. SLD versionado en `bk/styles/lote_borde.sld`. Aplica también a la versión filtrada por hacienda (CQL).
