@@ -13,6 +13,7 @@ Reestructuración del visor a **barra superior de pestañas** (visión del Ing.)
 - **Ortofoto Haciendas**: selector de hacienda → muestra su ortofoto. Si la hacienda tiene **varias piezas** (p.ej. `jenny_elizabeth_s2/s3/s4`), se muestran **juntas como mosaico** (son trozos de un mismo vuelo que no se unió por tamaño, NO fechas distintas — aclaración del usuario). Una sola opacidad controla todas las piezas. El **comparador temporal** entre fechas queda pendiente para cuando haya vuelos de fechas distintas (campo Date en GeoNode).
 - **Multiespectral**: placeholder con selector de índices (NDVI/NDRE/GNDVI/SAVI/OSAVI/VARI) deshabilitado; se calcularán con fórmulas de WebODM (rasterio+numexpr) cuando haya imágenes con banda NIR.
 - Match de ortofotos por tokens verificado con las reales: Jenny Elizabeth→3 piezas, Darwin Andres 1 vs 2 separados, Daniela vs Daniel Alejandro sin cruce.
+- **Limpieza de Cartografía**: la categoría Ortomosaicos (ortofotos) ya NO se lista en la pestaña Cartografía agrícola (`renderLayersTab` excluye `category==='ortomosaicos'`), y elegir hacienda en Cartografía carga solo capas vectoriales (no la ortofoto). Las ortofotos viven en la pestaña Ortofoto. También: `Cache-Control: no-cache` en las páginas para que el navegador tome siempre la última versión.
 
 ---
 

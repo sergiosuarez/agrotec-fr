@@ -576,8 +576,8 @@ function selectHacienda(nombre) {
             if (!state.activeLayers[HACIENDAS_ALT]) addWmsLayer(layer);
             setLotesTiles(withCql(layer.wms_url, `nombre_hcd='${nombre.replace(/'/g, "''")}'`));
         }
-        // 2) capas relacionadas (vectoriales / ortofotos) de esa hacienda, por nombre
-        relatedLayers(nombre).forEach(l => {
+        // 2) capas relacionadas SOLO vectoriales de esa hacienda (las ortofotos van en la pestaña Ortofoto)
+        relatedLayers(nombre).filter(l => l.subtype !== 'raster').forEach(l => {
             if (!state.activeLayers[l.alternate]) { addWmsLayer(l); autoRelated.push(l.alternate); }
         });
         // 2b) dejar los vectores (lotes/límites) por encima de las ortofotos raster
@@ -621,7 +621,9 @@ async function loadAll() {
 
 function renderLayersTab() {
     const q = document.getElementById('search-input').value.toLowerCase();
-    const filtered = q ? state.layers.filter(l => (l.title + l.alternate).toLowerCase().includes(q)) : state.layers;
+    // En Cartografía NO se listan las ortofotos (categoría 'ortomosaicos'): viven en la pestaña Ortofoto.
+    const base = state.layers.filter(l => l.category !== 'ortomosaicos');
+    const filtered = q ? base.filter(l => (l.title + l.alternate).toLowerCase().includes(q)) : base;
 
     if (filtered.length === 0) {
         document.getElementById('tab-layers').innerHTML = renderHaciendaSelector() + '<div class="empty">Sin resultados</div>';
