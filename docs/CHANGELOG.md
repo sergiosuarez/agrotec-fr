@@ -4,6 +4,19 @@
 
 ---
 
+## Comparador de ortofotos con cortina (swipe) — 2026-06-01
+
+A pedido del usuario, la comparación temporal pasó de mezcla (crossfade) a **cortina swipe** (barra arrastrable: a la izquierda fecha A, a la derecha fecha B), estilo leaflet-side-by-side.
+
+- Integrada la librería **`@maplibre/maplibre-gl-compare`** (CDN, expone `maplibregl.Compare`).
+- Overlay `#swipe-container` (2 mapas `#swipe-before`/`#swipe-after` sincronizados) sobre el mapa principal, con etiquetas A/B y botón cerrar (`#swipe-ui`).
+- En el comparador (≥2 fechas): selects A (anterior) / B (reciente) + botón "🪟 Comparar con cortina" → `openSwipe(listaA, listaB)` crea los 2 mapas (basemap actual + ortofoto de cada fecha) y la barra. `closeSwipe()` los destruye y se llama al cambiar hacienda / salir de la pestaña.
+- El mapa principal muestra por defecto la fecha B (reciente).
+
+Nota: verificación visual del swipe pendiente (no hay navegador en el server); CDN/global/sintaxis validados.
+
+---
+
 ## Comparador temporal de ortofotos + fix nombre/match — 2026-06-01
 
 - **Rename hacienda**: "San Fernando" → "Jose Fernando" en `haciendas_totales.nombre` (el Ing. confirmó que es Jose Fernando; misma hacienda verificada espacialmente). El código `nombre_hcd=HCDA_SAN_FERNANDO` se mantiene (filtra el límite).

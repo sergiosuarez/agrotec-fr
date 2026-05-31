@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>IDEPalma — Geovisor</title>
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+    <link href="https://unpkg.com/@maplibre/maplibre-gl-compare@0.5.0/dist/maplibre-gl-compare.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
     <style>
         :root {
@@ -146,6 +147,14 @@
         /* --- MAPA --- */
         #map-wrap { position: relative; }
         #map { width: 100%; height: 100%; }
+
+        /* Cortina de comparación de ortofotos (swipe) */
+        #swipe-container { position: absolute; inset: 0; z-index: 4; }
+        #swipe-container .swipe-map { position: absolute; inset: 0; }
+        #swipe-ui { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+        #swipe-ui .swipe-label { position: absolute; top: 10px; left: 12px; background: var(--panel); padding: 4px 12px; border-radius: 4px; font-size: .82rem; font-weight: 700; color: var(--palmar-green-dark); box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+        #swipe-ui .swipe-label-b { left: auto; right: 12px; }
+        #swipe-close { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--palmar-red); color: #fff; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: .8rem; font-weight: 600; pointer-events: auto; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
 
         .ml-overlay { position: absolute; background: var(--panel); padding: 4px 10px; font-size: .72rem; border-radius: 4px; backdrop-filter: blur(4px); z-index: 5; }
         /* coords queda en esquina inferior izq cuando el panel meteo esta cerrado,
@@ -318,6 +327,17 @@
         </div>
         <div class="ml-overlay" id="coords">—</div>
 
+        <!-- Cortina de comparación de ortofotos (swipe): 2 mapas sincronizados + barra -->
+        <div id="swipe-container" style="display:none">
+            <div id="swipe-before" class="swipe-map"></div>
+            <div id="swipe-after" class="swipe-map"></div>
+        </div>
+        <div id="swipe-ui" style="display:none">
+            <div class="swipe-label" id="swipe-label-a">A</div>
+            <div class="swipe-label swipe-label-b" id="swipe-label-b">B</div>
+            <button id="swipe-close">✕ Cerrar cortina</button>
+        </div>
+
         <!-- Panel inferior con graficos meteorologicos -->
         <div id="bottom-panel">
             <div id="bottom-panel-header">
@@ -361,6 +381,7 @@
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-compare@0.5.0/dist/maplibre-gl-compare.js"></script>
 <script>
 // ============================================================================
 // IDEPalma Geovisor v2 — MapLibre GL JS
@@ -1268,7 +1289,7 @@ function applyHaciendaToActiveTab() {
 // Retira las capas de una pestaña al salir de ella. Los LOTES NO se quitan (van en todas).
 function removeTabLayers(mode) {
     if (mode === 'cartografia') clearAutoRelated();
-    else if (mode === 'ortofoto') clearOrtoShown();
+    else if (mode === 'ortofoto') { closeSwipe(); clearOrtoShown(); }
     else if (mode === 'meteorologia') Object.keys(state.activeLayers).filter(a => a.startsWith('gfs:')).forEach(a => removeWmsLayer(a));
 }
 
@@ -1289,6 +1310,7 @@ function fmtOrtoDate(k) {
 }
 
 function showOrtoForHacienda(matchName) {
+    closeSwipe();
     clearOrtoShown();
     const body = document.getElementById('orto-body');
     if (!matchName) { body.innerHTML = '<div class="empty">Elige una hacienda (arriba a la derecha) para ver su ortofoto.</div>'; return; }
@@ -1316,28 +1338,69 @@ function renderOrtoMosaic(list, dateKey) {
     document.getElementById('orto-op').addEventListener('input', e => ortoShown.forEach(a => setOpacity(a, e.target.value / 100)));
 }
 
-// Comparador temporal: fecha A (base) vs fecha B (encima), slider de mezcla A⟷B
+// Comparador temporal: elige fecha A (anterior) y B (reciente) y abre una CORTINA
+// (swipe) con dos mapas sincronizados — a la izquierda A, a la derecha B.
 function renderOrtoComparator(byDate, dates, ai, bi) {
+    closeSwipe();
     clearOrtoShown();
     if (ai == null) ai = 0;                    // por defecto: más antigua
     if (bi == null) bi = dates.length - 1;     // vs más reciente
-    const a = byDate[dates[ai]], b = byDate[dates[bi]];
-    a.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });  // A debajo
-    b.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });  // B encima
+    // en el mapa principal mostramos la fecha B (reciente) por defecto
+    byDate[dates[bi]].forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });
+    bringLotesToTop();
     const opts = (sel) => dates.map((d, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${fmtOrtoDate(d)}</option>`).join('');
     document.getElementById('orto-body').innerHTML =
         `<div class="of-label">🕓 Comparación temporal (${dates.length} fechas)</div>` +
-        `<div class="of-label">A — anterior</div><select id="orto-a">${opts(ai)}</select>` +
-        `<div class="of-label">B — más reciente</div><select id="orto-b">${opts(bi)}</select>` +
-        `<div class="of-label">Mezcla&nbsp; A ⟷ B</div><input type="range" id="orto-blend" min="0" max="100" value="100" style="width:100%">` +
-        `<div class="of-hint">Desliza para fundir entre las dos fechas (izquierda = A, derecha = B). Útil para ver cambios entre vuelos.</div>`;
-    const setBlend = v => b.forEach(l => setOpacity(l.alternate, v / 100));
-    setBlend(100);
-    bringLotesToTop();
-    document.getElementById('orto-blend').addEventListener('input', e => setBlend(+e.target.value));
-    document.getElementById('orto-a').addEventListener('change', e => renderOrtoComparator(byDate, dates, +e.target.value, +document.getElementById('orto-b').value));
-    document.getElementById('orto-b').addEventListener('change', e => renderOrtoComparator(byDate, dates, +document.getElementById('orto-a').value, +e.target.value));
+        `<div class="of-label">A — anterior (izquierda)</div><select id="orto-a">${opts(ai)}</select>` +
+        `<div class="of-label">B — reciente (derecha)</div><select id="orto-b">${opts(bi)}</select>` +
+        `<button class="of-btn" id="orto-swipe">🪟 Comparar con cortina</button>` +
+        `<div class="of-hint">Abre una barra arrastrable sobre el mapa: a la izquierda la fecha A, a la derecha la B.</div>`;
+    const reRender = () => renderOrtoComparator(byDate, dates,
+        +document.getElementById('orto-a').value, +document.getElementById('orto-b').value);
+    document.getElementById('orto-a').addEventListener('change', reRender);
+    document.getElementById('orto-b').addEventListener('change', reRender);
+    document.getElementById('orto-swipe').addEventListener('click', () =>
+        openSwipe(byDate[dates[ai]], byDate[dates[bi]], fmtOrtoDate(dates[ai]), fmtOrtoDate(dates[bi])));
 }
+
+// === Cortina (swipe) con maplibre-gl-compare: 2 mapas sincronizados ===
+let swipeCompare = null, swipeBefore = null, swipeAfter = null;
+
+function basemapKeyNow() { return document.getElementById('basemap-select')?.value || 'osm'; }
+
+function addOrthoTo(m, list) {
+    list.forEach(l => {
+        const id = 'o_' + l.alternate.replace(/[^a-z0-9]/gi, '_');
+        if (m.getSource(id)) return;
+        m.addSource(id, { type: 'raster', tiles: [l.wms_url], tileSize: 512 });
+        m.addLayer({ id, type: 'raster', source: id });
+    });
+}
+
+function openSwipe(listA, listB, labelA, labelB) {
+    closeSwipe();
+    if (typeof maplibregl.Compare !== 'function') { alert('Componente de cortina no disponible.'); return; }
+    document.getElementById('swipe-container').style.display = 'block';
+    document.getElementById('swipe-ui').style.display = 'block';
+    document.getElementById('swipe-label-a').textContent = 'A · ' + labelA;
+    document.getElementById('swipe-label-b').textContent = 'B · ' + labelB;
+    const center = map.getCenter(), zoom = map.getZoom(), bearing = map.getBearing(), pitch = map.getPitch();
+    const key = basemapKeyNow();
+    swipeBefore = new maplibregl.Map({ container: 'swipe-before', style: basemapStyle(key), center, zoom, bearing, pitch, attributionControl: false });
+    swipeAfter = new maplibregl.Map({ container: 'swipe-after', style: basemapStyle(key), center, zoom, bearing, pitch, attributionControl: false });
+    swipeBefore.on('load', () => addOrthoTo(swipeBefore, listA));
+    swipeAfter.on('load', () => addOrthoTo(swipeAfter, listB));
+    swipeCompare = new maplibregl.Compare(swipeBefore, swipeAfter, '#swipe-container', {});
+}
+
+function closeSwipe() {
+    if (swipeCompare) { try { swipeCompare.remove(); } catch (e) {} swipeCompare = null; }
+    if (swipeBefore) { try { swipeBefore.remove(); } catch (e) {} swipeBefore = null; }
+    if (swipeAfter) { try { swipeAfter.remove(); } catch (e) {} swipeAfter = null; }
+    const c = document.getElementById('swipe-container'); if (c) c.style.display = 'none';
+    const u = document.getElementById('swipe-ui'); if (u) u.style.display = 'none';
+}
+document.getElementById('swipe-close').addEventListener('click', closeSwipe);
 
 // --- GO ---
 map.on('load', loadAll);
