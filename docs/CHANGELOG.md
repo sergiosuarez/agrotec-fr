@@ -43,6 +43,7 @@ Realidad de datos confirmada: la capa `haciendas_palmar` (en `geonode_data`) es 
 
 - **Zoom inicial** ajustado al extent de las 22 haciendas (antes: centro fijo de Ecuador / featured).
 - **Selector de hacienda** (dropdown verde arriba de la pestaña de capas): elegir una → zoom a su bbox + filtra la capa de lotes por `CQL_FILTER nombre_hcd='…'` (vía `setTiles`, sin recrear el layer). "— Todas —" quita el filtro y reencuadra todo.
+- **Carga dinámica de capas relacionadas** (visor general por hacienda): al elegir una hacienda, además del filtro de lotes, se auto-cargan las capas (vectoriales/ortofotos) cuyo nombre corresponde a esa hacienda, emparejando por slug COMPLETO (`agricola_jose_fernando`) para no confundir homónimas (Jenny Elizabeth vs Jenny Judith). Se rastrean en `autoRelated` y se quitan al cambiar de hacienda. Probado: Amelia → `lotes_agricola_amelia_actual`, Jose Fernando → `lotes_agricola_jose_fernando_actual`. Se extiende a ortofotos automáticamente cuando se carguen con nombre por hacienda.
 - **Fix vista inicial:** antes el zoom a haciendas no aplicaba porque `updateUrlState` persistía la vista (lat/lng) en cada movimiento y al recargar `parseUrlState` restauraba ese Ecuador. Ahora `updateUrlState` persiste SOLO las capas activas (param `l`); la vista entra a la URL únicamente desde el botón Compartir, con marcador `s=1`. `parseUrlView` solo respeta la vista si hay `s=1` → URLs viejas se ignoran y el load normal siempre encuadra las 22 haciendas.
 
 ### Pendiente de las siguientes fases
