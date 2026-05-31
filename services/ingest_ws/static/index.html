@@ -39,6 +39,12 @@
         }
         #app.sidebar-collapsed #sidebar-toggle { left: 0; }
 
+        /* Selector de hacienda (Cartografía agrícola) */
+        .hacienda-selector { background: var(--palmar-green); padding: 8px 10px; border-radius: 5px; margin-bottom: 10px; }
+        .hacienda-selector label { display: block; font-size: .7rem; color: #ffffffcc; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+        .hacienda-selector select { width: 100%; padding: 6px 8px; border: 1px solid var(--palmar-green-dark); border-radius: 4px; font-size: .85rem; background: white; color: var(--text); cursor: pointer; }
+        .hacienda-selector select:focus { outline: 2px solid #fff8; }
+
         #sidebar-search { padding: 8px 12px; background: white; border-bottom: 1px solid var(--border); }
         #sidebar-search input { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: .9rem; }
         #sidebar-search input:focus { outline: 2px solid var(--palmar-green); border-color: transparent; }
@@ -401,6 +407,76 @@ function prefetchGfsNeighbors() {
     });
 }
 
+// ============================================================================
+// HACIENDAS — selector + zoom (Cartografía agrícola)
+// Driven por /api/v1/haciendas/extents (atributo nombre_hcd de la capa de lotes).
+// ============================================================================
+let haciendas = [];            // [{nombre, n_lotes, area_ha, bbox:[minx,miny,maxx,maxy]}]
+let selectedHacienda = '';     // '' = todas
+const HACIENDAS_ALT = 'geonode:haciendas_palmar';
+
+async function loadHaciendas() {
+    try {
+        const r = await fetch(`${API}/api/v1/haciendas/extents`);
+        const d = await r.json();
+        haciendas = Array.isArray(d) ? d : [];
+    } catch (e) { haciendas = []; return; }
+    // Zoom inicial al extent de TODAS las haciendas (salvo que la URL traiga vista)
+    const params = new URLSearchParams(location.search);
+    if (!params.get('lat') && haciendas.length) fitHaciendasAll();
+    renderLayersTab();
+}
+
+function haciendasGlobalBounds() {
+    if (!haciendas.length) return null;
+    const xs = haciendas.flatMap(h => [h.bbox[0], h.bbox[2]]);
+    const ys = haciendas.flatMap(h => [h.bbox[1], h.bbox[3]]);
+    return [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+}
+function fitHaciendasAll() {
+    const b = haciendasGlobalBounds();
+    if (b) map.fitBounds(b, { padding: 40 });
+}
+
+function renderHaciendaSelector() {
+    if (!haciendas.length) return '';
+    const opts = ['<option value="">— Todas las haciendas —</option>'].concat(
+        haciendas.map(h => `<option value="${h.nombre}" ${h.nombre === selectedHacienda ? 'selected' : ''}>${h.nombre} (${h.n_lotes} lotes)</option>`)
+    );
+    return `<div class="hacienda-selector">
+        <label>🏞 Hacienda</label>
+        <select id="hacienda-select">${opts.join('')}</select>
+    </div>`;
+}
+
+function bindHaciendaSelect() {
+    const sel = document.getElementById('hacienda-select');
+    if (sel) sel.addEventListener('change', e => selectHacienda(e.target.value));
+}
+
+// Anexa un CQL_FILTER a una URL WMS de GeoServer
+function withCql(url, cql) { return url + '&CQL_FILTER=' + encodeURIComponent(cql); }
+
+// Selecciona una hacienda: filtra la capa de lotes por nombre_hcd y hace zoom a su bbox.
+// nombre = '' => muestra todas (sin filtro) y encuadra todas.
+function selectHacienda(nombre) {
+    selectedHacienda = nombre;
+    const layer = state.layers.find(l => l.alternate === HACIENDAS_ALT);
+    if (!layer) { if (!nombre) fitHaciendasAll(); return; }
+    if (!state.activeLayers[HACIENDAS_ALT]) addWmsLayer(layer);   // asegurar capa activa
+    const info = state.activeLayers[HACIENDAS_ALT];
+    const src = info && map.getSource(info.sourceId);
+    if (nombre) {
+        const cql = `nombre_hcd='${nombre.replace(/'/g, "''")}'`;
+        if (src && src.setTiles) src.setTiles([withCql(layer.wms_url, cql)]);
+        const h = haciendas.find(x => x.nombre === nombre);
+        if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 60, maxZoom: 17 });
+    } else {
+        if (src && src.setTiles) src.setTiles([layer.wms_url]);
+        fitHaciendasAll();
+    }
+}
+
 // --- Bootstrap: cargar capas + health + GFS ---
 async function loadAll() {
     try {
@@ -414,7 +490,7 @@ async function loadAll() {
     } catch (e) {
         document.getElementById('tab-layers').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
     }
-    loadHealth(); loadGFS();
+    loadHealth(); loadGFS(); loadHaciendas();
     parseUrlState();
 }
 
@@ -423,7 +499,8 @@ function renderLayersTab() {
     const filtered = q ? state.layers.filter(l => (l.title + l.alternate).toLowerCase().includes(q)) : state.layers;
 
     if (filtered.length === 0) {
-        document.getElementById('tab-layers').innerHTML = '<div class="empty">Sin resultados</div>';
+        document.getElementById('tab-layers').innerHTML = renderHaciendaSelector() + '<div class="empty">Sin resultados</div>';
+        bindHaciendaSelect();
         return;
     }
     // Agrupar por categoria
@@ -441,7 +518,8 @@ function renderLayersTab() {
             ${items.map(l => renderLayerItem(l)).join('')}
         </div>
     `;}).join('');
-    document.getElementById('tab-layers').innerHTML = html;
+    document.getElementById('tab-layers').innerHTML = renderHaciendaSelector() + html;
+    bindHaciendaSelect();
 
     // Toggle colapso de categorias
     document.querySelectorAll('#tab-layers .category h2').forEach(h => {

@@ -11,8 +11,12 @@ class Settings(BaseSettings):
     app_workers: int = 4
     cors_origins: str = "*"
 
-    # Base de datos
+    # Base de datos propia del visor
     database_url: str = "postgresql+psycopg://agrotecuser:changeme@agrotec_db:5432/agrotecdb"
+
+    # Geodata de GeoNode (solo lectura): extents de haciendas y consultas espaciales
+    # sobre las capas vectoriales publicadas. Apunta a la BD geonode_data de db4agrotec.
+    geodata_url: str = "postgresql+psycopg://geonode_data:changeme@db4agrotec:5432/geonode_data"
 
     # Redis
     redis_url: str = "redis://agrotec_redis:6379/0"

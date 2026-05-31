@@ -4,6 +4,30 @@
 
 ---
 
+## Cartografía agrícola: selector de hacienda + zoom inicial — 2026-05-31
+
+Primera fase del rediseño hacia un visor por haciendas (visión del Ing.: pestañas Cartografía / Ortofoto / Multiespectral). Esta entrega cubre la navegación por hacienda en la capa de lotes.
+
+Realidad de datos confirmada: la capa `haciendas_palmar` (en `geonode_data`) es **una sola** con **453 lotes**; el atributo `nombre_hcd` identifica a cuál de las **22 haciendas** pertenece cada polígono. Las tablas relacionales (`hacienda/parcela/lote/ortomosaico`) están vacías → el selector se driven por atributo (sin ETL), decisión del usuario.
+
+### API (`services/ingest_ws/app/routers/haciendas.py`)
+
+- Nuevo `GET /api/v1/haciendas/extents` → `[{nombre, n_lotes, area_ha, bbox[4] WGS84}]`. Consulta directa a la geodata (`ST_Extent` + `ST_Transform 32717→4326`, `ST_Area/10000` para ha) agrupando por `nombre_hcd`. Whitelist defensivo de identificadores. Conexión read-only nueva a `geonode_data` (`config.geodata_url` / `GEODATA_URL` en `.env`, fuera del repo; `database.get_geodata_engine()` lazy).
+
+### Frontend (`services/ingest_ws/static/index.html`)
+
+- **Zoom inicial** ajustado al extent de las 22 haciendas (antes: centro fijo de Ecuador / featured).
+- **Selector de hacienda** (dropdown verde arriba de la pestaña de capas): elegir una → zoom a su bbox + filtra la capa de lotes por `CQL_FILTER nombre_hcd='…'` (vía `setTiles`, sin recrear el layer). "— Todas —" quita el filtro y reencuadra todo. Respeta vista de la URL si viene en el query.
+
+### Pendiente de las siguientes fases
+
+- Pestañas superiores (Cartografía / Ortofoto / Multiespectral); Meteo GFS queda como categoría dentro de Cartografía.
+- Ortofoto Haciendas con comparador temporal (depende de cargar ortofotos con hacienda+fecha → tabla `ortomosaico`).
+- Compresor COG-JPEG (página Python subir→comprimir→descargar, JPEG visualmente sin pérdida) para habilitar la carga de ortofotos pesadas.
+- Multiespectral: panel placeholder; índices (NDVI/NDRE/SAVI…) replicando fórmulas de WebODM con rasterio+numexpr cuando haya data multiespectral (requiere banda NIR).
+
+---
+
 ## Stepper temporal para capas WMS de GFS — 2026-05-31
 
 Las capas WMS de GFS dejaron de mostrar solo el paso por defecto: ahora se puede recorrer el pronóstico paso a paso. **Decisión de diseño:** stepper discreto (no slider en vivo). Análisis previo: un slider que re-pide WMS por tick da mal UX (lag/parpadeo); con nuestra subregión diminuta (~225 puntos, ~0.2s/tile) un stepper con prefetch del vecino es instantáneo y barato. Se descartó el slider animado por ahora (se puede montar encima reusando el cache si se quiere animación tipo Windy).
