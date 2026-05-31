@@ -44,6 +44,7 @@ class LayerOut(BaseModel):
     wms_url: str
     legend_url: str | None = None
     legend: dict | None = None              # {min, max, unit} para leyenda custom (capas GFS)
+    date: str | None = None                 # fecha del recurso en GeoNode (para comparador temporal de ortofotos)
     thumbnail_url: str | None = None
     bbox: list[float] | None = None         # [minx, miny, maxx, maxy] en WGS84
     # Config local del visor (puede ser None si no esta configurada)
@@ -158,6 +159,7 @@ async def list_layers(
             category=_categorize(alt, subtype),
             wms_url=_wms_base(alt),
             legend_url=_legend_url(alt),
+            date=d.get("date"),
             thumbnail_url=d.get("thumbnail_url"),
             bbox=_bbox_from_dataset(d),
             visible=visible,

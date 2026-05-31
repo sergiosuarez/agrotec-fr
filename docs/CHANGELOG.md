@@ -4,6 +4,14 @@
 
 ---
 
+## Comparador temporal de ortofotos + fix nombre/match — 2026-06-01
+
+- **Rename hacienda**: "San Fernando" → "Jose Fernando" en `haciendas_totales.nombre` (el Ing. confirmó que es Jose Fernando; misma hacienda verificada espacialmente). El código `nombre_hcd=HCDA_SAN_FERNANDO` se mantiene (filtra el límite).
+- **Fix match de ortofotos**: las ortofotos se llaman `hcda_<x>_*_cog` (igual prefijo que los límites vectoriales `hcda_<x>`). La exclusión `geonode:hcda_` en `relatedLayers` las estaba descartando → "no hay ortofoto". Ahora la exclusión aplica solo a `hcda_*` **vector** (límites); las ortofotos (raster) sí matchean.
+- **Comparador temporal**: backend expone `date` (campo Date de GeoNode) por capa (`LayerOut.date`). En Ortofoto, las ortofotos de una hacienda se **agrupan por fecha**: 1 fecha → mosaico (como antes); **≥2 fechas → comparador** (selects A=anterior / B=más reciente + slider de mezcla A⟷B para ver cambios entre vuelos). Probado con Jose Fernando (marzo 2026-03-27 vs mayo 2026-05-31).
+
+---
+
 ## Fix: visor no cargaba tras subir 27 shapefiles (GeoNode saturado) — 2026-06-01
 
 Tras subir 27 shapefiles a la vez, el visor mostraba "Unexpected token 'I'… is not valid JSON": `/api/v1/layers` daba 500. Causas y fixes:

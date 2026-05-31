@@ -529,7 +529,9 @@ function relatedLayers(nombre) {
     if (!want.length) return [];
     return state.layers.filter(l => {
         if (l.alternate === HACIENDAS_ALT) return false;
-        if (l.alternate.startsWith('geonode:hcda_')) return false;   // límites individuales: no como relacionada
+        // límites individuales (vector hcda_*) no como relacionada; PERO las ortofotos
+        // también se llaman hcda_*_cog (raster) y esas SÍ deben matchear.
+        if (l.alternate.startsWith('geonode:hcda_') && l.subtype === 'vector') return false;
         const toks = new Set(slug(l.alternate + ' ' + (l.title || '')).split('_'));
         return want.every(t => toks.has(t));
     });
@@ -1279,6 +1281,13 @@ function clearOrtoShown() {
     ortoShown = [];
 }
 
+function ortoDateKey(l) { return (l.date || '').slice(0, 10) || 'sin-fecha'; }
+function fmtOrtoDate(k) {
+    if (k === 'sin-fecha') return 'sin fecha';
+    const d = new Date(k + 'T00:00:00');
+    return isNaN(d) ? k : d.toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function showOrtoForHacienda(matchName) {
     clearOrtoShown();
     const body = document.getElementById('orto-body');
@@ -1286,19 +1295,48 @@ function showOrtoForHacienda(matchName) {
     // el zoom lo hace applyHaciendaToActiveTab (con el bbox real del límite)
     ortoList = relatedLayers(matchName).filter(l => l.subtype === 'raster');
     if (!ortoList.length) { body.innerHTML = '<div class="empty">No hay ortofoto cargada para esta hacienda todavía.</div>'; return; }
-    // Mostrar TODAS las piezas juntas: forman el mosaico de la ortofoto de la hacienda
-    // (varias piezas = un solo vuelo que no se unió por tamaño, NO fechas distintas).
-    ortoList.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });
-    const multi = ortoList.length > 1;
-    body.innerHTML =
-        `<div class="of-label">Ortofoto${multi ? ` — mosaico (${ortoList.length} piezas)` : ''}</div>` +
-        ortoList.map(o => `<div class="of-card"><div class="of-name">${o.title}</div><div class="of-meta">${o.alternate.split(':').pop()}</div></div>`).join('') +
+    // Agrupar por FECHA del vuelo (campo Date de GeoNode). Varias piezas con la misma
+    // fecha = mosaico de un vuelo; fechas distintas = comparación temporal.
+    const byDate = {};
+    ortoList.forEach(l => { (byDate[ortoDateKey(l)] ||= []).push(l); });
+    const dates = Object.keys(byDate).sort();   // asc; última = más reciente
+    if (dates.length >= 2) renderOrtoComparator(byDate, dates);
+    else renderOrtoMosaic(ortoList, dates[0]);
+}
+
+// Una sola fecha (o sin fecha): muestra todas las piezas juntas (mosaico)
+function renderOrtoMosaic(list, dateKey) {
+    list.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });
+    const multi = list.length > 1;
+    document.getElementById('orto-body').innerHTML =
+        `<div class="of-label">Ortofoto${dateKey && dateKey !== 'sin-fecha' ? ' — ' + fmtOrtoDate(dateKey) : ''}${multi ? ` (mosaico, ${list.length} piezas)` : ''}</div>` +
+        list.map(o => `<div class="of-card"><div class="of-name">${o.title}</div><div class="of-meta">${o.alternate.split(':').pop()}</div></div>`).join('') +
         `<div class="opacity-row" style="padding-left:0"><span>opacidad</span><input type="range" id="orto-op" min="0" max="100" value="100"></div>` +
-        (multi ? '<div class="of-hint">Esta hacienda tiene varias piezas que forman un solo mosaico (no se unieron por tamaño). Se muestran juntas.</div>' : '') +
-        '<div class="of-hint">🕓 El comparador temporal entre fechas se habilitará cuando subas vuelos de fechas distintas (campo <b>Date</b> en GeoNode).</div>';
-    // una sola opacidad controla todas las piezas
-    document.getElementById('orto-op').addEventListener('input', e =>
-        ortoShown.forEach(a => setOpacity(a, e.target.value / 100)));
+        '<div class="of-hint">🕓 El comparador temporal se activa cuando la hacienda tiene vuelos de 2+ fechas (campo <b>Date</b> en GeoNode).</div>';
+    document.getElementById('orto-op').addEventListener('input', e => ortoShown.forEach(a => setOpacity(a, e.target.value / 100)));
+}
+
+// Comparador temporal: fecha A (base) vs fecha B (encima), slider de mezcla A⟷B
+function renderOrtoComparator(byDate, dates, ai, bi) {
+    clearOrtoShown();
+    if (ai == null) ai = 0;                    // por defecto: más antigua
+    if (bi == null) bi = dates.length - 1;     // vs más reciente
+    const a = byDate[dates[ai]], b = byDate[dates[bi]];
+    a.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });  // A debajo
+    b.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });  // B encima
+    const opts = (sel) => dates.map((d, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${fmtOrtoDate(d)}</option>`).join('');
+    document.getElementById('orto-body').innerHTML =
+        `<div class="of-label">🕓 Comparación temporal (${dates.length} fechas)</div>` +
+        `<div class="of-label">A — anterior</div><select id="orto-a">${opts(ai)}</select>` +
+        `<div class="of-label">B — más reciente</div><select id="orto-b">${opts(bi)}</select>` +
+        `<div class="of-label">Mezcla&nbsp; A ⟷ B</div><input type="range" id="orto-blend" min="0" max="100" value="100" style="width:100%">` +
+        `<div class="of-hint">Desliza para fundir entre las dos fechas (izquierda = A, derecha = B). Útil para ver cambios entre vuelos.</div>`;
+    const setBlend = v => b.forEach(l => setOpacity(l.alternate, v / 100));
+    setBlend(100);
+    bringLotesToTop();
+    document.getElementById('orto-blend').addEventListener('input', e => setBlend(+e.target.value));
+    document.getElementById('orto-a').addEventListener('change', e => renderOrtoComparator(byDate, dates, +e.target.value, +document.getElementById('orto-b').value));
+    document.getElementById('orto-b').addEventListener('change', e => renderOrtoComparator(byDate, dates, +document.getElementById('orto-a').value, +e.target.value));
 }
 
 // --- GO ---
