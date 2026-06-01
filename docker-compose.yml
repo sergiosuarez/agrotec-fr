@@ -48,7 +48,7 @@ services:
       REDIS_URL: redis://agrotec_redis:6379/0
       THREDDS_URL: http://agrotec_thredds:8080
       GFS_DIR: /data/actual
-      APP_WORKERS: "2"
+      APP_WORKERS: "1"   # 1 worker: la caché de capas (en memoria) se comparte; el API es async + threadpool, suficiente para esta carga
       # Evita errores de lock HDF5 al leer los NetCDF GFS con lecturas concurrentes
       # (2 workers) mientras el scheduler los reescribe cada 6h.
       HDF5_USE_FILE_LOCKING: "FALSE"

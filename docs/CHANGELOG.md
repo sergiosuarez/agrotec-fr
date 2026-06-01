@@ -4,6 +4,18 @@
 
 ---
 
+## Mitigación lentitud GeoNode (caché compartida del visor) — 2026-06-01
+
+GeoNode quedó lento tras subir las 27 capas: su API v2 serializa ~0.27s/dataset (procesamiento por-recurso interno, no mejora limitando campos; permisos normales, Celery idle, GeoServer rápido). Con 52 datasets el catálogo MapStore tarda ~8s/página → a veces da "página no disponible" (timeout del cliente). GeoNode NO está caído (home 200, API responde). Acelerar GeoNode en serio = tuning aparte.
+
+Para que el visor (cliente) no sufra esa lentitud:
+- TTL de la caché de capas 120s → **600s** (refresca del GeoNode lento 1 vez cada 10 min).
+- Visor a **1 worker uvicorn** (`APP_WORKERS=1`): la caché en memoria se comparte entre peticiones (antes con 2 workers cada uno refrescaba 18s). Resultado: 1ª carga ~18s (refresco), resto ~0.1s. El API es async + threadpool, suficiente para esta carga.
+
+Operativo: tras reiniciar `django4agrotec` hay que reiniciar `nginx4agrotec` (resuelve el upstream `django`; si no, da 502/empty-reply).
+
+---
+
 ## Comparador de ortofotos con cortina (swipe) — 2026-06-01
 
 A pedido del usuario, la comparación temporal pasó de mezcla (crossfade) a **cortina swipe** (barra arrastrable: a la izquierda fecha A, a la derecha fecha B), estilo leaflet-side-by-side.

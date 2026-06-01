@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/v1/layers", tags=["layers"])
 import time as _time
 
 _datasets_cache: dict = {"data": None, "ts": 0.0}
-_CACHE_TTL = 120  # segundos
+_CACHE_TTL = 600  # segundos (GeoNode es lento; refrescamos cada 10 min)
 
 
 class LayerOut(BaseModel):
