@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>IDEPalma — Geovisor</title>
+    <link rel="icon" type="image/png" href="https://idepalma.desarrollowebsite.com/uploaded/img/2026/05/encabezado.png">
+    <link rel="apple-touch-icon" href="https://idepalma.desarrollowebsite.com/uploaded/img/2026/05/encabezado.png">
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
     <link href="https://unpkg.com/@maplibre/maplibre-gl-compare@0.5.0/dist/maplibre-gl-compare.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
@@ -492,7 +494,7 @@ function changeGfsTime(delta) {
         if (!alt.startsWith('gfs:')) return;
         const layer = state.layers.find(l => l.alternate === alt);
         const src = map.getSource(info.sourceId);
-        if (src && src.setTiles) src.setTiles([withGfsTime(layer.wms_url, gfsTimeIdx)]);
+        safeSetTiles(src, [withGfsTime(layer.wms_url, gfsTimeIdx)]);
     });
     updateGfsTimeUI();
     prefetchGfsNeighbors();
@@ -596,6 +598,13 @@ function fitHaciendasAll() {
 // Anexa un CQL_FILTER a una URL WMS de GeoServer
 function withCql(url, cql) { return url + '&CQL_FILTER=' + encodeURIComponent(cql); }
 
+// setTiles seguro: al recargar la fuente, MapLibre cancela las tiles en vuelo y lanza
+// un AbortError inofensivo; lo ignoramos para no ensuciar la consola.
+function safeSetTiles(src, urls) {
+    if (!src || !src.setTiles) return;
+    try { src.setTiles(urls); } catch (e) { if (e && e.name !== 'AbortError') console.warn('setTiles:', e); }
+}
+
 // Límite de hacienda (haciendas_totales) en TODAS las pestañas, filtrado por código
 // (nombre_hcd). codigo = '' => muestra las 26 sin filtro.
 function applyLotesFilter(codigo) {
@@ -605,7 +614,8 @@ function applyLotesFilter(codigo) {
     const info = state.activeLayers[HACIENDAS_ALT];
     const src = info && map.getSource(info.sourceId);
     const url = codigo ? withCql(layer.wms_url, `nombre_hcd='${codigo.replace(/'/g, "''")}'`) : layer.wms_url;
-    if (src && src.setTiles) src.setTiles([url]);
+    // dedup: solo recargar tiles si la URL cambió (evita recarga/AbortError redundante al cargar)
+    if (info && info.tilesUrl !== url) { safeSetTiles(src, [url]); info.tilesUrl = url; }
 }
 
 // Capas vectoriales relacionadas de la hacienda (solo en Cartografía), por nombre legible
@@ -752,7 +762,7 @@ function addWmsLayer(layer) {
         attribution: 'IDEPalma / GeoServer'
     });
     map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': defaultOp } });
-    state.activeLayers[layer.alternate] = { opacity: defaultOp, sourceId: id, subtype: layer.subtype };
+    state.activeLayers[layer.alternate] = { opacity: defaultOp, sourceId: id, subtype: layer.subtype, tilesUrl: tilesUrlFor(layer) };
     renderLayersTab();
     if (layer.alternate.startsWith('gfs:')) prefetchGfsNeighbors();
     // los lotes (Lotes Palmar) van por encima de ortofotos/meteo en todas las pestañas
