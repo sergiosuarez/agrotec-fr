@@ -63,6 +63,37 @@ def haciendas_extents() -> list[HaciendaExtentOut]:
     ]
 
 
+class LoteAreaOut(BaseModel):
+    lote: str
+    area_ha: float
+
+
+@router.get("/lotes", response_model=list[LoteAreaOut])
+def hacienda_lotes(
+    nombre: str = Query(..., description="nombre legible de la hacienda (sin sufijo de pieza)"),
+) -> list[LoteAreaOut]:
+    """Área (ha) por lote de una hacienda — para el resumen/pie chart del visor.
+
+    Fuente: `haciendas_palmar`. Empareja por nombre (los lotes guardan
+    'Agricola <Nombre>' en nombre_hcd) con ILIKE. El área se calcula desde la
+    geometría porque la columna area_ha es texto.
+    """
+    sql = text("""
+        SELECT lotes AS lote,
+               round((SUM(ST_Area(ST_Force2D(geometry))) / 10000.0)::numeric, 2) AS area_ha
+        FROM haciendas_palmar
+        WHERE nombre_hcd ILIKE '%' || :nombre || '%' AND lotes IS NOT NULL
+        GROUP BY lotes
+        ORDER BY area_ha DESC NULLS LAST
+    """)
+    try:
+        with get_geodata_engine().connect() as conn:
+            rows = conn.execute(sql, {"nombre": nombre}).mappings().all()
+    except Exception as e:
+        raise HTTPException(503, f"geodata no disponible: {e}")
+    return [LoteAreaOut(lote=str(r["lote"]), area_ha=float(r["area_ha"] or 0)) for r in rows]
+
+
 @router.get("", response_model=list[HaciendaOut])
 def list_haciendas(db: Session = Depends(get_db)) -> list[Hacienda]:
     return list(db.scalars(select(Hacienda).order_by(Hacienda.nombre)))

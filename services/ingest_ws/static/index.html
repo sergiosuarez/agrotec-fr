@@ -285,6 +285,23 @@
             #chart-pron-wrap { border-right: none; border-bottom: 1px solid var(--border); }
             #map-wrap.meteo-open #coords { bottom: calc(62vh + 10px); }
         }
+
+        /* ===== Popup de bienvenida ===== */
+        #welcome-overlay { display: none; position: fixed; inset: 0; background: #0008; z-index: 200; align-items: center; justify-content: center; padding: 16px; }
+        #welcome-modal { background: #fff; border-radius: 12px; max-width: 460px; width: 100%; padding: 22px 24px; box-shadow: 0 12px 40px rgba(0,0,0,.35); text-align: center; max-height: 90vh; overflow-y: auto; }
+        #welcome-modal .welcome-logo { height: 44px; width: auto; margin-bottom: 6px; }
+        #welcome-modal h2 { margin: 6px 0 8px; font-size: 1.2rem; color: var(--palmar-green-dark); }
+        #welcome-modal p { font-size: .85rem; color: var(--text); line-height: 1.5; margin: 0 0 12px; }
+        .welcome-tips { text-align: left; font-size: .82rem; color: var(--text); line-height: 1.7; margin: 0 0 10px; padding-left: 18px; }
+        .welcome-tips li { margin-bottom: 2px; }
+        .welcome-dontshow { display: flex; align-items: center; gap: 6px; justify-content: center; font-size: .8rem; color: var(--muted); cursor: pointer; }
+
+        /* ===== Tarjeta resumen de hacienda (pie de área por lote) ===== */
+        #hcda-resumen { background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--palmar-green); border-radius: 6px; margin: 8px 12px 0; padding: 8px 10px; }
+        #hcda-resumen .hr-title { font-size: .9rem; font-weight: 700; color: var(--palmar-green-dark); }
+        #hcda-resumen .hr-stats { font-size: .8rem; color: var(--muted); margin: 2px 0 4px; }
+        #hcda-resumen .hr-chart { width: 100%; height: 180px; }
+        #hcda-resumen .hr-cap { font-size: .68rem; color: var(--muted); text-align: center; }
     </style>
 </head>
 <body>
@@ -307,6 +324,13 @@
         <div id="mode-cartografia" class="mode-panel active">
         <div id="sidebar-search">
             <input id="search-input" type="text" placeholder="🔍 Buscar capa por nombre…">
+        </div>
+
+        <div id="hcda-resumen" style="display:none;">
+            <div class="hr-title">🌴 <span id="hcda-resumen-nombre"></span></div>
+            <div id="hcda-resumen-stats" class="hr-stats"></div>
+            <div id="hcda-resumen-chart" class="hr-chart"></div>
+            <div class="hr-cap">Área por lote (ha)</div>
         </div>
 
         <div id="sidebar-tabs">
@@ -437,6 +461,23 @@
 </div><!-- /#shell -->
 
 <!-- Admin modal -->
+<div id="welcome-overlay">
+    <div id="welcome-modal">
+        <img class="welcome-logo" src="https://idepalma.desarrollowebsite.com/uploaded/img/2026/05/encabezado.png" alt="IDEPalma">
+        <h2>Bienvenido al Geoportal IDEPalma</h2>
+        <p>Plataforma geoespacial de <b>Corporación PALMAR</b> para la gestión de haciendas:
+           cartografía agrícola, ortofotos de dron, análisis multiespectral y meteorología (GFS).</p>
+        <ul class="welcome-tips">
+            <li>🏞 Elige una <b>hacienda</b> arriba a la derecha para enfocarte en ella.</li>
+            <li>🗂 Cambia de <b>modo</b> en las pestañas superiores (Cartografía, Ortofoto, Multiespectral, Meteorología).</li>
+            <li>🛩 En <b>Ortofoto</b> compara sobrevuelos con el deslizador temporal.</li>
+            <li>🌦 En <b>Meteorología</b> haz clic en el mapa para el pronóstico puntual.</li>
+        </ul>
+        <label class="welcome-dontshow"><input type="checkbox" id="welcome-dontshow-cb"> No volver a mostrar</label>
+        <button id="welcome-close" class="of-btn" style="margin-top:12px;">Entrar al geoportal</button>
+    </div>
+</div>
+
 <div id="admin-overlay">
     <div id="admin-modal">
         <h2>⚙ Admin del visor</h2>
@@ -1377,6 +1418,48 @@ function applyHaciendaToActiveTab() {
     if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: currentMode === 'ortofoto' ? 50 : 60, maxZoom: currentMode === 'ortofoto' ? 18 : 16 });
     else fitHaciendasAll();
     bringLotesToTop();
+    updateHaciendaResumen(matchName, h);             // tarjeta resumen + pie de área por lote
+}
+
+// ===== Resumen de hacienda (tarjeta + pie de área por lote, estilo CMET) =====
+let chartLotes = null;
+async function updateHaciendaResumen(matchName, h) {
+    const box = document.getElementById('hcda-resumen');
+    if (!box) return;
+    if (!matchName || !h) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    document.getElementById('hcda-resumen-nombre').textContent = h.nombre;
+    const stats = document.getElementById('hcda-resumen-stats');
+    const chartEl = document.getElementById('hcda-resumen-chart');
+    stats.textContent = 'cargando…';
+    try {
+        const r = await fetch(`/api/v1/haciendas/lotes?nombre=${encodeURIComponent(matchName)}`);
+        const lotes = r.ok ? await r.json() : [];
+        if (!lotes.length) { stats.textContent = 'Sin lotes registrados.'; chartEl.style.display = 'none'; return; }
+        const total = lotes.reduce((s, x) => s + (x.area_ha || 0), 0);
+        stats.innerHTML = `<b>${lotes.length}</b> lotes · <b>${total.toFixed(1)}</b> ha`;
+        chartEl.style.display = 'block';
+        if (!chartLotes) chartLotes = echarts.init(chartEl);
+        const PAL = ['#1B7A40','#2E9E57','#5FB87C','#8Fd0a3','#E32630','#f0883e','#F5C518','#3498db','#9b59b6','#16a085','#27ae60','#e67e22'];
+        // lotes viene ordenado por área desc; con muchos lotes agrupamos top 12 + "Otros"
+        const TOP = 12;
+        const pieData = lotes.slice(0, TOP).map((x, i) => ({ name: x.lote, value: +x.area_ha.toFixed(2), itemStyle: { color: PAL[i % PAL.length] } }));
+        if (lotes.length > TOP) {
+            const rest = lotes.slice(TOP).reduce((s, x) => s + (x.area_ha || 0), 0);
+            pieData.push({ name: `Otros (${lotes.length - TOP})`, value: +rest.toFixed(2), itemStyle: { color: '#b8c2b5' } });
+        }
+        chartLotes.setOption({
+            tooltip: { trigger: 'item', formatter: '{b}: {c} ha ({d}%)' },
+            legend: { show: false },
+            series: [{
+                type: 'pie', radius: ['38%', '70%'], center: ['50%', '52%'],
+                data: pieData,
+                label: { fontSize: 9, formatter: '{b}' },
+                labelLine: { length: 4, length2: 4 }
+            }]
+        });
+        setTimeout(() => chartLotes.resize(), 50);
+    } catch (e) { stats.textContent = 'No se pudo cargar el resumen.'; chartEl.style.display = 'none'; }
 }
 
 // Retira las capas de una pestaña al salir de ella. Los LOTES NO se quitan (van en todas).
@@ -1494,6 +1577,18 @@ function closeSwipe() {
     const u = document.getElementById('swipe-ui'); if (u) u.style.display = 'none';
 }
 document.getElementById('swipe-close').addEventListener('click', closeSwipe);
+
+// --- Popup de bienvenida (con "no volver a mostrar", estilo FAO) ---
+(function () {
+    const ov = document.getElementById('welcome-overlay');
+    if (!ov) return;
+    if (localStorage.getItem('idepalma_welcome_hide') === '1') { ov.style.display = 'none'; return; }
+    ov.style.display = 'flex';
+    document.getElementById('welcome-close').addEventListener('click', () => {
+        if (document.getElementById('welcome-dontshow-cb').checked) localStorage.setItem('idepalma_welcome_hide', '1');
+        ov.style.display = 'none';
+    });
+})();
 
 // --- GO ---
 map.on('load', loadAll);
