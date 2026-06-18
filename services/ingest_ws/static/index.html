@@ -330,7 +330,6 @@
         <div class="modes">
             <div class="mode-tab active" data-mode="cartografia">🗺 Cartografía</div>
             <div class="mode-tab" data-mode="ortofoto">🛩 Ortofoto</div>
-            <div class="mode-tab" data-mode="comparacion">🕓 Comparación</div>
             <div class="mode-tab" data-mode="multiespectral">🌈 Multiespectral</div>
             <div class="mode-tab" data-mode="meteorologia">🌦 Meteorología</div>
         </div>
@@ -378,14 +377,6 @@
             <div class="mode-scroll">
                 <div class="mode-intro">Ortofoto de la hacienda seleccionada (selector arriba a la derecha). Si tiene varias piezas se muestran juntas como mosaico.</div>
                 <div id="orto-body"><div class="empty">Elige una hacienda (arriba a la derecha) para ver su ortofoto.</div></div>
-            </div>
-        </div>
-
-        <!-- ===== Modo: Comparación Temporal ===== -->
-        <div id="mode-comparacion" class="mode-panel">
-            <div class="mode-scroll">
-                <div class="mode-intro">Compara la misma hacienda en <b>distintas fechas</b> de sobrevuelo con una cortina deslizante. Elige una hacienda arriba a la derecha.</div>
-                <div id="comp-body"><div class="empty">Elige una hacienda (arriba a la derecha) para comparar sus vuelos.</div></div>
             </div>
         </div>
 
@@ -1490,7 +1481,7 @@ window.addEventListener('resize', () => { chartPron?.resize(); chartProf?.resize
 // El mapa es compartido; cada modo cambia el contenido del sidebar.
 // ============================================================================
 let currentMode = 'cartografia';
-const MODES = ['cartografia', 'ortofoto', 'comparacion', 'multiespectral', 'meteorologia'];
+const MODES = ['cartografia', 'ortofoto', 'multiespectral', 'meteorologia'];
 
 function setMode(mode) {
     if (mode === currentMode) return;
@@ -1523,7 +1514,6 @@ function applyHaciendaToActiveTab() {
     refreshHaciendaLayers();                         // filtra lotes y puntos de control a esta hacienda
     if (currentMode === 'cartografia') loadCartoVectors(matchName);
     else if (currentMode === 'ortofoto') showOrtoForHacienda(matchName);
-    else if (currentMode === 'comparacion') showComparacionForHacienda(matchName);
     if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: currentMode === 'ortofoto' ? 50 : 60, maxZoom: currentMode === 'ortofoto' ? 18 : 16 });
     else fitHaciendasAll();
     bringLotesToTop();
@@ -1575,7 +1565,7 @@ async function updateHaciendaResumen(matchName, h) {
 // Retira las capas de una pestaña al salir de ella. Los LOTES NO se quitan (van en todas).
 function removeTabLayers(mode) {
     if (mode === 'cartografia') clearAutoRelated();
-    else if (mode === 'ortofoto' || mode === 'comparacion') { closeSwipe(); clearOrtoShown(); }
+    else if (mode === 'ortofoto') { closeSwipe(); clearOrtoShown(); }
     else if (mode === 'meteorologia') Object.keys(state.activeLayers).filter(a => a.startsWith('gfs:')).forEach(a => removeWmsLayer(a));
 }
 
@@ -1610,6 +1600,7 @@ function showOrtoForHacienda(matchName) {
     const dates = Object.keys(byDate).sort();   // asc; última = más reciente
     const latest = dates[dates.length - 1];     // Ortofoto = vuelo más reciente (mosaico)
     renderOrtoMosaic(byDate[latest], latest);
+    if (dates.length >= 2) appendComparator(byDate, dates);   // comparación temporal en el mismo panel
 }
 
 // Una sola fecha (o sin fecha): muestra todas las piezas juntas (mosaico)
@@ -1619,46 +1610,25 @@ function renderOrtoMosaic(list, dateKey) {
     document.getElementById('orto-body').innerHTML =
         `<div class="of-label">Ortofoto${dateKey && dateKey !== 'sin-fecha' ? ' — ' + fmtOrtoDate(dateKey) : ''}${multi ? ` (mosaico, ${list.length} piezas)` : ''}</div>` +
         list.map(o => `<div class="of-card"><div class="of-name">${o.title}</div><div class="of-meta">${o.alternate.split(':').pop()}</div></div>`).join('') +
-        `<div class="opacity-row" style="padding-left:0"><span>opacidad</span><input type="range" id="orto-op" min="0" max="100" value="100"></div>` +
-        '<div class="of-hint">🕓 Para comparar vuelos de distintas fechas, usa la pestaña <b>Comparación</b>.</div>';
+        `<div class="opacity-row" style="padding-left:0"><span>opacidad</span><input type="range" id="orto-op" min="0" max="100" value="100"></div>`;
     document.getElementById('orto-op').addEventListener('input', e => ortoShown.forEach(a => setOpacity(a, e.target.value / 100)));
 }
 
-// ===== Pestaña Comparación Temporal =====
-function showComparacionForHacienda(matchName) {
-    closeSwipe();
-    clearOrtoShown();
-    const body = document.getElementById('comp-body');
-    if (!matchName) { body.innerHTML = '<div class="empty">Elige una hacienda (arriba a la derecha) para comparar sus vuelos.</div>'; return; }
-    const list = relatedLayers(matchName).filter(l => l.subtype === 'raster');
-    const byDate = {};
-    list.forEach(l => { (byDate[ortoDateKey(l)] ||= []).push(l); });
-    const dates = Object.keys(byDate).sort();
-    if (dates.length < 2) {
-        body.innerHTML = `<div class="empty">Esta hacienda necesita <b>2 o más vuelos</b> con fecha para comparar.<br><small>${dates.length === 1 ? 'Actualmente tiene 1 vuelo.' : 'No tiene ortofotos con fecha.'}</small></div>`;
-        return;
-    }
-    renderTemporalComparator(byDate, dates);
-}
-
-// Comparador temporal: elige fecha A (anterior) y B (reciente) y abre una CORTINA
-// (swipe) con dos mapas sincronizados — a la izquierda A, a la derecha B.
-function renderTemporalComparator(byDate, dates, ai, bi) {
-    closeSwipe();
-    clearOrtoShown();
+// Sección de comparación temporal DENTRO del panel de Ortofoto (aparece solo si la
+// hacienda tiene 2+ fechas de vuelo): elige A (anterior) y B (reciente) y abre la cortina.
+function appendComparator(byDate, dates, ai, bi) {
     if (ai == null) ai = 0;                    // por defecto: más antigua
     if (bi == null) bi = dates.length - 1;     // vs más reciente
-    // en el mapa principal mostramos la fecha B (reciente) por defecto
-    byDate[dates[bi]].forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });
-    bringLotesToTop();
+    let div = document.getElementById('orto-compare');
+    if (!div) { div = document.createElement('div'); div.id = 'orto-compare'; document.getElementById('orto-body').appendChild(div); }
     const opts = (sel) => dates.map((d, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${fmtOrtoDate(d)}</option>`).join('');
-    document.getElementById('comp-body').innerHTML =
-        `<div class="of-label">🕓 Comparación temporal (${dates.length} fechas)</div>` +
+    div.innerHTML =
+        `<div class="of-label" style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">🕓 Comparación temporal (${dates.length} fechas)</div>` +
         `<div class="of-label">A — anterior (izquierda)</div><select id="orto-a">${opts(ai)}</select>` +
         `<div class="of-label">B — reciente (derecha)</div><select id="orto-b">${opts(bi)}</select>` +
         `<button class="of-btn" id="orto-swipe">🪟 Comparar con cortina</button>` +
-        `<div class="of-hint">Abre una barra arrastrable sobre el mapa: a la izquierda la fecha A, a la derecha la B.</div>`;
-    const reRender = () => renderTemporalComparator(byDate, dates,
+        `<div class="of-hint">Abre una barra arrastrable: a la izquierda la fecha A, a la derecha la B.</div>`;
+    const reRender = () => appendComparator(byDate, dates,
         +document.getElementById('orto-a').value, +document.getElementById('orto-b').value);
     document.getElementById('orto-a').addEventListener('change', reRender);
     document.getElementById('orto-b').addEventListener('change', reRender);
