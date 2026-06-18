@@ -44,6 +44,17 @@ app.add_middleware(
 # Gating por sesión de GeoNode (SSO). Solo actúa si VISOR_AUTH_REQUIRED=true.
 app.middleware("http")(auth_middleware)
 
+
+@app.on_event("startup")
+async def _prewarm_datasets_cache() -> None:
+    """Pre-carga la caché de capas de GeoNode al arrancar (en segundo plano),
+    para que el primer usuario no espere los ~35s de la API de GeoNode."""
+    import asyncio
+
+    from .routers.layers import refresh_datasets_cache
+
+    asyncio.create_task(refresh_datasets_cache())
+
 # Routers
 app.include_router(health.router)
 app.include_router(cultivos.router)

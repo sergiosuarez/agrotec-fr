@@ -25,10 +25,31 @@ router = APIRouter(prefix="/api/v1/layers", tags=["layers"])
 # Caché del listado de datasets de GeoNode: su API es lenta (~12s con 40+ capas), así que
 # servimos el último listado por _CACHE_TTL s (cargas repetidas instantáneas) y refrescamos
 # solo al expirar. Tambien sirve de fallback si GeoNode se cuelga/timeout.
+import asyncio
 import time as _time
 
 _datasets_cache: dict = {"data": None, "ts": 0.0}
 _CACHE_TTL = 600  # segundos (GeoNode es lento; refrescamos cada 10 min)
+_refreshing = {"on": False}
+
+
+async def refresh_datasets_cache() -> None:
+    """Refresca la caché de datasets desde GeoNode (idempotente, sin solaparse).
+
+    Se usa para el pre-warm al arrancar y para el refresco en segundo plano
+    (stale-while-revalidate), de modo que ningún usuario espere los ~35s de GeoNode.
+    """
+    if _refreshing["on"]:
+        return
+    _refreshing["on"] = True
+    try:
+        data = await geonode.list_datasets(page_size=200)
+        _datasets_cache["data"] = data
+        _datasets_cache["ts"] = _time.time()
+    except Exception:
+        pass
+    finally:
+        _refreshing["on"] = False
 
 
 class LayerOut(BaseModel):
@@ -126,17 +147,20 @@ async def list_layers(
     Por defecto omite las que tienen `visible=False` en visor_layer_config (que el admin
     marco como ocultas). Con `include_hidden=true` las incluye (para el modal admin).
     """
-    # Caché fresca → respuesta instantánea (evita los ~12s del API de GeoNode en cada carga).
-    fresh = _datasets_cache["data"] is not None and (_time.time() - _datasets_cache["ts"]) < _CACHE_TTL
-    if fresh:
+    # stale-while-revalidate: si hay algo en caché lo servimos YA; si está viejo,
+    # refrescamos en segundo plano (nadie espera los ~35s de GeoNode). Solo bloqueamos
+    # cuando no hay NADA en caché (primer arranque antes de que el pre-warm termine).
+    if _datasets_cache["data"] is not None:
         datasets = _datasets_cache["data"]
+        if (_time.time() - _datasets_cache["ts"]) >= _CACHE_TTL:
+            asyncio.create_task(refresh_datasets_cache())
     else:
         try:
             datasets = await geonode.list_datasets(page_size=200)
             _datasets_cache["data"] = datasets
             _datasets_cache["ts"] = _time.time()
         except Exception:
-            datasets = _datasets_cache.get("data") or []   # GeoNode caído: último-bueno
+            datasets = []
     # Indice de config local por alternate
     config_idx = {c.alternate: c for c in db.query(VisorLayerConfig).all()}
 

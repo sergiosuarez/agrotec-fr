@@ -16,8 +16,9 @@ class GeoNodeClient:
         self._host = settings.geonode_host_header
 
     def _client(self) -> httpx.AsyncClient:
+        # 90s: la API v2 de GeoNode tarda ~35s en serializar 50+ datasets (page_size grande).
         return httpx.AsyncClient(
-            timeout=30,
+            timeout=90,
             follow_redirects=True,
             headers={"Host": self._host},
         )
