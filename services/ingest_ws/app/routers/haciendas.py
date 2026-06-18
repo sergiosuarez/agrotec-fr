@@ -78,12 +78,14 @@ def hacienda_lotes(
     'Agricola <Nombre>' en nombre_hcd) con ILIKE. El área se calcula desde la
     geometría porque la columna area_ha es texto.
     """
+    # Etiqueta del lote: usa `lotes` si existe; si está vacía, cae a 'Lote <orden_lote>'
+    # (en varias haciendas `lotes` viene NULL pero orden_lote sí trae el número).
     sql = text("""
-        SELECT lotes AS lote,
+        SELECT COALESCE(NULLIF(trim(lotes), ''), 'Lote ' || orden_lote::text, 's/n') AS lote,
                round((SUM(ST_Area(ST_Force2D(geometry))) / 10000.0)::numeric, 2) AS area_ha
         FROM haciendas_palmar
-        WHERE nombre_hcd ILIKE '%' || :nombre || '%' AND lotes IS NOT NULL
-        GROUP BY lotes
+        WHERE nombre_hcd ILIKE '%' || :nombre || '%'
+        GROUP BY 1
         ORDER BY area_ha DESC NULLS LAST
     """)
     try:
