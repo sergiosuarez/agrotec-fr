@@ -225,6 +225,24 @@
         /* Velo bajo el panel (solo móvil) — oculto en escritorio para no romper el grid */
         #sidebar-backdrop { display: none; }
 
+        /* Mini-mapa locator (overview de haciendas, estilo CMET) */
+        #minimap {
+            position: absolute; bottom: 16px; right: 16px;
+            width: 210px; height: 165px; z-index: 5;
+            border: 2px solid var(--palmar-green); border-radius: 6px;
+            overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.3); background: #e8eee6;
+        }
+        #minimap .mini-title {
+            position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+            background: var(--palmar-green); color: #fff; font-size: .62rem;
+            text-align: center; padding: 2px 0; font-weight: 700; letter-spacing: .03em;
+        }
+        .mini-dot {
+            width: 9px; height: 9px; border-radius: 50%; background: var(--palmar-green);
+            border: 1.5px solid #fff; box-shadow: 0 0 2px rgba(0,0,0,.6); cursor: pointer;
+        }
+        .mini-dot.sel { width: 16px; height: 16px; background: var(--palmar-red); box-shadow: 0 0 4px rgba(0,0,0,.7); }
+
         /* ============================================================== */
         /*  RESPONSIVE — móvil / tablet angosta (≤ 768px)                 */
         /*  El sidebar de 340px fijos se comía la pantalla. En móvil el   */
@@ -284,6 +302,7 @@
             #bottom-content { grid-template-columns: 1fr; grid-template-rows: 56% 44%; }
             #chart-pron-wrap { border-right: none; border-bottom: 1px solid var(--border); }
             #map-wrap.meteo-open #coords { bottom: calc(62vh + 10px); }
+            #minimap { display: none; }   /* el locator se oculta en móvil (poco espacio) */
         }
 
         /* ===== Popup de bienvenida ===== */
@@ -428,6 +447,9 @@
             </select>
         </div>
         <div class="ml-overlay" id="coords">—</div>
+
+        <!-- Mini-mapa locator (estilo CMET): todas las haciendas; resalta la seleccionada -->
+        <div id="minimap"><div class="mini-title">Haciendas</div></div>
 
         <!-- Cortina de comparación de ortofotos (swipe): 2 mapas sincronizados + barra -->
         <div id="swipe-container" style="display:none">
@@ -734,6 +756,42 @@ function fitHaciendasAll() {
     if (b) map.fitBounds(b, { padding: 40 });
 }
 
+// ===== Mini-mapa locator (overview de todas las haciendas, estilo CMET) =====
+let miniMap = null, miniMarkers = [];
+function initMinimap() {
+    if (miniMap || !document.getElementById('minimap')) return;
+    miniMap = new maplibregl.Map({
+        container: 'minimap', style: basemapStyle('cartolight'),
+        interactive: false, attributionControl: false,
+        center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM
+    });
+    miniMap.on('load', renderMinimap);
+}
+function renderMinimap() {
+    if (!miniMap || !haciendas.length) return;
+    miniMarkers.forEach(m => m.remove()); miniMarkers = [];
+    haciendas.forEach(h => {
+        const cx = (h.bbox[0] + h.bbox[2]) / 2, cy = (h.bbox[1] + h.bbox[3]) / 2;
+        const d = document.createElement('div');
+        d.className = 'mini-dot' + (h.codigo === selectedHacienda ? ' sel' : '');
+        d.title = h.nombre;
+        d.addEventListener('click', () => {   // clic en el locator → ir a esa hacienda
+            selectedHacienda = h.codigo;
+            const sel = document.getElementById('global-hacienda'); if (sel) sel.value = h.codigo;
+            applyHaciendaToActiveTab();
+        });
+        miniMarkers.push(new maplibregl.Marker({ element: d }).setLngLat([cx, cy]).addTo(miniMap));
+    });
+    const b = haciendasGlobalBounds();
+    if (b) miniMap.fitBounds(b, { padding: 20, duration: 0 });
+}
+function updateMinimapSelection() {
+    miniMarkers.forEach((m, i) => {
+        const h = haciendas[i];
+        if (h) m.getElement().classList.toggle('sel', h.codigo === selectedHacienda);
+    });
+}
+
 // Anexa un CQL_FILTER a una URL WMS de GeoServer
 function withCql(url, cql) { return url + '&CQL_FILTER=' + encodeURIComponent(cql); }
 
@@ -785,6 +843,7 @@ async function loadAll() {
         state.layers = await r.json();
         await loadGfsTimes();   // antes de activar featured, para que las capas GFS salgan con el paso correcto
         await loadHaciendas();  // carga el catalogo de haciendas (sin encuadrar todavia)
+        initMinimap();          // mini-mapa locator con todas las haciendas
         renderLayersTab();
         // Activar las featured automáticamente
         state.layers.filter(l => l.featured).forEach(l => addWmsLayer(l));
@@ -1455,6 +1514,7 @@ function applyHaciendaToActiveTab() {
     else fitHaciendasAll();
     bringLotesToTop();
     updateHaciendaResumen(matchName, h);             // tarjeta resumen + pie de área por lote
+    updateMinimapSelection();                        // resalta la hacienda activa en el locator
 }
 
 // ===== Resumen de hacienda (tarjeta + pie de área por lote, estilo CMET) =====
