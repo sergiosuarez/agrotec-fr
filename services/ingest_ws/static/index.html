@@ -557,9 +557,22 @@ function withGfsTime(url, idx) {
 
 // Si la capa es GFS y ya hay tiempos cargados, devuelve la URL con el paso actual
 function tilesUrlFor(layer) {
-    return (layer.alternate.startsWith('gfs:') && gfsTimes.length)
+    let url = (layer.alternate.startsWith('gfs:') && gfsTimes.length)
         ? withGfsTime(layer.wms_url, gfsTimeIdx)
         : layer.wms_url;
+    // Lotes Palmar: filtra por la hacienda seleccionada (nombre_hcd = 'Agricola <Nombre>')
+    if (layer.alternate === LOTES_ALT && haciendaMatch)
+        url = withCql(url, `nombre_hcd ILIKE '%${haciendaMatch.replace(/'/g, "''")}%'`);
+    return url;
+}
+
+// Re-aplica el filtro de hacienda a la capa Lotes Palmar si está activa
+function refreshLotesPalmar() {
+    const info = state.activeLayers[LOTES_ALT];
+    const layer = state.layers.find(l => l.alternate === LOTES_ALT);
+    if (!info || !layer) return;
+    const url = tilesUrlFor(layer);
+    if (info.tilesUrl !== url) { safeSetTiles(map.getSource(info.sourceId), [url]); info.tilesUrl = url; }
 }
 
 // lon/lat -> EPSG:3857 (para prefetch con bbox concreto)
@@ -644,6 +657,8 @@ let selectedHacienda = '';     // '' = todas; si no, el CÓDIGO (nombre_hcd, ej.
 let autoRelated = [];          // alternates de capas relacionadas que cargamos auto (para limpiarlas al cambiar)
 // Capa autoritativa de límites de hacienda (26 polígonos, filtrable por nombre_hcd)
 const HACIENDAS_ALT = 'geonode:haciendas_totales';
+const LOTES_ALT = 'geonode:haciendas_palmar';   // capa "Lotes Palmar" (lotes coloreados)
+let haciendaMatch = '';                          // nombre legible de la hacienda activa (para filtrar lotes)
 
 // Normaliza un texto a slug (minus, sin acentos, _). Para emparejar capas con haciendas.
 function slug(s) {
@@ -745,7 +760,7 @@ function loadCartoVectors(matchName) {
 
 // Lotes (y vectores) por encima de ortofotos/meteo raster
 function bringLotesToTop() {
-    [HACIENDAS_ALT, ...autoRelated].forEach(alt => {
+    [HACIENDAS_ALT, LOTES_ALT, ...autoRelated].forEach(alt => {
         const info = state.activeLayers[alt];
         if (info && map.getLayer(info.sourceId)) map.moveLayer(info.sourceId);
     });
@@ -1411,8 +1426,10 @@ function applyHaciendaToActiveTab() {
     const h = codigo ? haciendas.find(x => x.codigo === codigo) : null;
     // nombre para emparejar ortofotos/vectores: legible, sin el sufijo de pieza (-1, _2…)
     const matchName = h ? h.nombre.replace(/[-_\s]*\d+$/, '') : '';
+    haciendaMatch = matchName;                       // para filtrar "Lotes Palmar" por hacienda
     clearAutoRelated();                              // limpia vectores de la hacienda anterior
     applyLotesFilter(codigo);                        // límite de hacienda en TODAS las pestañas
+    refreshLotesPalmar();                            // filtra los lotes coloreados a esta hacienda
     if (currentMode === 'cartografia') loadCartoVectors(matchName);
     else if (currentMode === 'ortofoto') showOrtoForHacienda(matchName);
     if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: currentMode === 'ortofoto' ? 50 : 60, maxZoom: currentMode === 'ortofoto' ? 18 : 16 });
