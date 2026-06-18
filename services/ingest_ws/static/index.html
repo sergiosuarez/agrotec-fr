@@ -762,9 +762,12 @@ function initMinimap() {
     if (miniMap || !document.getElementById('minimap')) return;
     miniMap = new maplibregl.Map({
         container: 'minimap', style: basemapStyle('cartolight'),
-        interactive: false, attributionControl: false,
-        center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM
+        attributionControl: false, center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM
     });
+    // Interactivo (arrastrar/zoom para alcanzar haciendas apiñadas), pero sin rotación
+    miniMap.dragRotate.disable();
+    miniMap.touchZoomRotate.disableRotation();
+    miniMap.keyboard.disable();
     miniMap.on('load', renderMinimap);
 }
 function renderMinimap() {
@@ -783,7 +786,8 @@ function renderMinimap() {
         miniMarkers.push(new maplibregl.Marker({ element: d }).setLngLat([cx, cy]).addTo(miniMap));
     });
     const b = haciendasGlobalBounds();
-    if (b) miniMap.fitBounds(b, { padding: 20, duration: 0 });
+    // Más margen arriba para que las haciendas no queden bajo el título ni en el borde
+    if (b) miniMap.fitBounds(b, { padding: { top: 34, bottom: 20, left: 20, right: 20 }, duration: 0 });
 }
 function updateMinimapSelection() {
     miniMarkers.forEach((m, i) => {
