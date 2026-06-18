@@ -221,6 +221,70 @@
         #chart-prof-title { font-size: .7rem; color: var(--muted); text-align: center; padding: 2px; }
         #chart-prof { flex: 1; min-height: 0; }
         .panel-loading { padding: 40px; text-align: center; color: var(--muted); }
+
+        /* Velo bajo el panel (solo móvil) — oculto en escritorio para no romper el grid */
+        #sidebar-backdrop { display: none; }
+
+        /* ============================================================== */
+        /*  RESPONSIVE — móvil / tablet angosta (≤ 768px)                 */
+        /*  El sidebar de 340px fijos se comía la pantalla. En móvil el   */
+        /*  mapa va a pantalla completa y el panel se DESLIZA por encima. */
+        /* ============================================================== */
+        @media (max-width: 768px) {
+            /* Topbar compacto; pestañas con scroll horizontal si no caben */
+            #topbar { flex: 0 0 46px; }
+            #topbar .brand { padding: 0 8px; }
+            #topbar .brand-logo { height: 26px; }
+            #topbar .modes { overflow-x: auto; }
+            #topbar .modes::-webkit-scrollbar { display: none; }
+            .mode-tab { padding: 0 11px; font-size: .82rem; white-space: nowrap; }
+            #topbar .topbar-right { padding: 0 6px; gap: 4px; }
+            #topbar .topbar-right label { display: none; }   /* oculta "🏞 Hacienda" */
+            #global-hacienda { max-width: 40vw; font-size: .76rem; }
+
+            /* Mapa a pantalla completa; el panel se vuelve un overlay deslizante.
+               UNA sola columna: el sidebar es position:absolute (fuera del flujo),
+               así el único item del grid es #map-wrap y ocupa todo el ancho.
+               (Con "0 1fr" el grid metía el mapa en la columna de 0px → mapa en blanco.) */
+            #app, #app.sidebar-collapsed { grid-template-columns: 1fr; }
+            #sidebar {
+                position: absolute; top: 0; left: 0; bottom: 0;
+                width: 86vw; max-width: 340px; z-index: 30;
+                box-shadow: 2px 0 16px rgba(0,0,0,.35);
+                transform: translateX(0); transition: transform .25s ease;
+            }
+            #app.sidebar-collapsed #sidebar { transform: translateX(-100%); }
+
+            /* Velo oscuro: tocar fuera del panel lo cierra */
+            #sidebar-backdrop {
+                display: block; position: absolute; inset: 0;
+                background: rgba(0,0,0,.4); z-index: 20;
+                opacity: 0; pointer-events: none; transition: opacity .2s ease;
+            }
+            #app:not(.sidebar-collapsed) #sidebar-backdrop { opacity: 1; pointer-events: auto; }
+
+            /* Altura dinámica: respeta las barras de Safari iOS (evita que el contenido
+               quede detrás de la barra inferior, que es lo que ocultaba el botón). */
+            #shell { height: 100vh; height: 100dvh; }
+
+            /* Botón flotante CENTRADO verticalmente en el borde izquierdo
+               (estilo pestaña de cajón) → siempre visible en iPhone, sin importar
+               las barras del navegador. Antes con bottom:18px quedaba detrás de la
+               barra inferior de Safari y no aparecía en iPhone real. */
+            #sidebar-toggle {
+                top: 50%; bottom: auto; transform: translateY(-50%);
+                left: min(86vw, 340px);
+                width: 34px; height: 58px; font-size: 1.15rem;
+                border-radius: 0 8px 8px 0; z-index: 31;
+                box-shadow: 2px 1px 6px rgba(0,0,0,.3);
+            }
+
+            /* Panel inferior de meteorología: más bajo y con gráficos apilados */
+            #bottom-panel { height: 62vh; max-height: 460px; }
+            #bottom-content { grid-template-columns: 1fr; grid-template-rows: 56% 44%; }
+            #chart-pron-wrap { border-right: none; border-bottom: 1px solid var(--border); }
+            #map-wrap.meteo-open #coords { bottom: calc(62vh + 10px); }
+        }
     </style>
 </head>
 <body>
@@ -312,7 +376,19 @@
         </div>
     </aside>
 
+    <div id="sidebar-backdrop"></div>
     <button id="sidebar-toggle" title="Mostrar/ocultar panel de capas">‹</button>
+    <script>
+      /* En móvil el panel arranca OCULTO para que el mapa se vea completo.
+         Se ejecuta durante el parseo (el #app y el botón ya existen) → sin parpadeo. */
+      (function () {
+        if (window.matchMedia('(max-width: 768px)').matches) {
+          document.getElementById('app').classList.add('sidebar-collapsed');
+          var b = document.getElementById('sidebar-toggle');
+          if (b) b.textContent = '›';
+        }
+      })();
+    </script>
 
     <main id="map-wrap">
         <div id="map"></div>
@@ -1238,13 +1314,19 @@ function renderProfileAt(idx) {
 }
 
 // Sidebar colapsable
-document.getElementById('sidebar-toggle').addEventListener('click', () => {
+function setSidebar(collapsed) {
     const app = document.getElementById('app');
-    app.classList.toggle('sidebar-collapsed');
+    app.classList.toggle('sidebar-collapsed', collapsed);
     const btn = document.getElementById('sidebar-toggle');
     btn.textContent = app.classList.contains('sidebar-collapsed') ? '›' : '‹';
     setTimeout(() => { map.resize(); chartPron?.resize(); chartProf?.resize(); }, 280);
+}
+const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
+document.getElementById('sidebar-toggle').addEventListener('click', () => {
+    setSidebar(!document.getElementById('app').classList.contains('sidebar-collapsed'));
 });
+// En móvil: tocar el velo cierra el panel
+document.getElementById('sidebar-backdrop').addEventListener('click', () => setSidebar(true));
 
 // Botones panel meteo
 document.getElementById('btn-close-meteo').addEventListener('click', closeMeteoPanel);
@@ -1280,6 +1362,7 @@ document.querySelectorAll('.mode-tab').forEach(t => t.addEventListener('click', 
 document.getElementById('global-hacienda').addEventListener('change', e => {
     selectedHacienda = e.target.value;
     applyHaciendaToActiveTab();
+    if (isMobile()) setSidebar(true);   // en móvil, cerrar el panel para ver el mapa
 });
 
 function applyHaciendaToActiveTab() {

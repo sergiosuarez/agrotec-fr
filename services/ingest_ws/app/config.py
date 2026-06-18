@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     app_workers: int = 4
     cors_origins: str = "*"
 
+    # Gating del visor por sesión de GeoNode (SSO). Apagado por defecto.
+    visor_auth_required: bool = False
+
     # Base de datos propia del visor
     database_url: str = "postgresql+psycopg://agrotecuser:changeme@agrotec_db:5432/agrotecdb"
 

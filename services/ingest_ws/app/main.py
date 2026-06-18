@@ -1,11 +1,12 @@
 """FastAPI app entrypoint."""
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .auth import _session_is_valid, auth_middleware
 from .config import settings
 from .routers import (
     compresor,
@@ -40,6 +41,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Gating por sesión de GeoNode (SSO). Solo actúa si VISOR_AUTH_REQUIRED=true.
+app.middleware("http")(auth_middleware)
+
 # Routers
 app.include_router(health.router)
 app.include_router(cultivos.router)
@@ -69,3 +73,15 @@ def root() -> FileResponse:
 @app.get("/compresor", include_in_schema=False)
 def compresor_page() -> FileResponse:
     return FileResponse("static/compresor.html", headers=_NOCACHE)
+
+
+@app.get("/auth/check", include_in_schema=False)
+async def auth_check(request: Request) -> Response:
+    """Validación de sesión para nginx auth_request (gating de GeoServer).
+
+    200 si la cookie `sessionid` corresponde a un usuario logueado en GeoNode; 401 si no.
+    """
+    sid = request.cookies.get("sessionid")
+    if sid and await _session_is_valid(sid):
+        return Response(status_code=200)
+    return Response(status_code=401)

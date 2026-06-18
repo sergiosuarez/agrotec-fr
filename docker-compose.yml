@@ -52,6 +52,8 @@ services:
       # Evita errores de lock HDF5 al leer los NetCDF GFS con lecturas concurrentes
       # (2 workers) mientras el scheduler los reescribe cada 6h.
       HDF5_USE_FILE_LOCKING: "FALSE"
+      # Gating del visor por sesión de GeoNode (SSO): solo entran usuarios autenticados.
+      VISOR_AUTH_REQUIRED: "true"
     expose:
       - "8000"
     volumes:
