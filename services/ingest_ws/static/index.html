@@ -1045,7 +1045,13 @@ document.getElementById('btn-fit-all').addEventListener('click', () => {
     const lats = active.flatMap(l => [l.bbox[1], l.bbox[3]]);
     map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 50 });
 });
-document.getElementById('btn-reset').addEventListener('click', () => map.flyTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }));
+document.getElementById('btn-reset').addEventListener('click', () => {
+    // Reset = volver a la vista general de TODAS las haciendas (no a todo Ecuador)
+    selectedHacienda = '';
+    const sel = document.getElementById('global-hacienda');
+    if (sel) sel.value = '';
+    applyHaciendaToActiveTab();   // limpia filtros + fitHaciendasAll() (bbox de las haciendas)
+});
 
 // --- URL state (compartir vista) ---
 // Persiste SOLO las capas activas en la URL (no la vista). Asi el load normal siempre
