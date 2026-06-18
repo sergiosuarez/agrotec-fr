@@ -760,7 +760,12 @@ function loadCartoVectors(matchName) {
 
 // Lotes (y vectores) por encima de ortofotos/meteo raster
 function bringLotesToTop() {
-    [HACIENDAS_ALT, LOTES_ALT, ...autoRelated].forEach(alt => {
+    // Sube TODAS las capas vectoriales por encima de los rasters (ortofotos/meteo).
+    // Orden: bordes → lotes → relacionadas → resto (p.ej. puntos de control) arriba.
+    const prioridad = [HACIENDAS_ALT, LOTES_ALT, ...autoRelated];
+    const otros = Object.keys(state.activeLayers)
+        .filter(alt => state.activeLayers[alt].subtype === 'vector' && !prioridad.includes(alt));
+    [...prioridad, ...otros].forEach(alt => {
         const info = state.activeLayers[alt];
         if (info && map.getLayer(info.sourceId)) map.moveLayer(info.sourceId);
     });
