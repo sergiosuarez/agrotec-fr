@@ -318,9 +318,20 @@
         /* ===== Tarjeta resumen de hacienda (pie de área por lote) ===== */
         #hcda-resumen { background: #fff; border: 1px solid var(--border); border-top: 3px solid var(--palmar-green); border-radius: 6px; margin: 8px 12px 0; padding: 8px 10px; }
         #hcda-resumen .hr-title { font-size: .9rem; font-weight: 700; color: var(--palmar-green-dark); }
-        #hcda-resumen .hr-stats { font-size: .8rem; color: var(--muted); margin: 2px 0 4px; }
         #hcda-resumen .hr-chart { width: 100%; height: 180px; }
         #hcda-resumen .hr-cap { font-size: .68rem; color: var(--muted); text-align: center; }
+        #hcda-resumen .hr-mini { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin: 6px 0; }
+        #hcda-resumen .hr-stat { background: #f4f8f2; border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; text-align: center; }
+        #hcda-resumen .hr-stat .v { font-size: .82rem; font-weight: 700; color: var(--palmar-green-dark); line-height: 1.2; }
+        #hcda-resumen .hr-stat .k { font-size: .56rem; color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
+        #hcda-resumen .hr-toggle { display: flex; gap: 4px; margin: 2px 0; }
+        #hcda-resumen .hr-tab { flex: 1; font-size: .72rem; padding: 3px; border: 1px solid var(--border); background: #fff; border-radius: 4px; cursor: pointer; color: var(--muted); }
+        #hcda-resumen .hr-tab.active { background: var(--palmar-green); color: #fff; border-color: var(--palmar-green); }
+        #hcda-resumen .hr-table { max-height: 175px; overflow-y: auto; }
+        #hcda-resumen .hr-table table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+        #hcda-resumen .hr-table th, #hcda-resumen .hr-table td { padding: 2px 5px; border-bottom: 1px solid #eee; }
+        #hcda-resumen .hr-table th { text-align: left; color: var(--muted); font-weight: 600; position: sticky; top: 0; background: #fff; }
+        #hcda-resumen .hr-table td.n { text-align: right; font-variant-numeric: tabular-nums; }
     </style>
 </head>
 <body>
@@ -347,8 +358,13 @@
 
         <div id="hcda-resumen" style="display:none;">
             <div class="hr-title">🌴 <span id="hcda-resumen-nombre"></span></div>
-            <div id="hcda-resumen-stats" class="hr-stats"></div>
+            <div id="hcda-resumen-mini" class="hr-mini"></div>
+            <div class="hr-toggle">
+                <button type="button" id="hr-tab-pie" class="hr-tab active">◔ Dona</button>
+                <button type="button" id="hr-tab-table" class="hr-tab">▤ Tabla</button>
+            </div>
             <div id="hcda-resumen-chart" class="hr-chart"></div>
+            <div id="hcda-resumen-table" class="hr-table" style="display:none;"></div>
             <div class="hr-cap">Área por lote (ha)</div>
         </div>
 
@@ -1522,44 +1538,84 @@ function applyHaciendaToActiveTab() {
 }
 
 // ===== Resumen de hacienda (tarjeta + pie de área por lote, estilo CMET) =====
-let chartLotes = null;
+let chartLotes = null, resumenView = 'pie';
+const RES_PAL = ['#1B7A40','#2E9E57','#5FB87C','#8Fd0a3','#E32630','#f0883e','#F5C518','#3498db','#9b59b6','#16a085','#27ae60','#e67e22'];
+
 async function updateHaciendaResumen(matchName, h) {
     const box = document.getElementById('hcda-resumen');
     if (!box) return;
     if (!matchName || !h) { box.style.display = 'none'; return; }
     box.style.display = 'block';
     document.getElementById('hcda-resumen-nombre').textContent = h.nombre;
-    const stats = document.getElementById('hcda-resumen-stats');
+    const mini = document.getElementById('hcda-resumen-mini');
     const chartEl = document.getElementById('hcda-resumen-chart');
-    stats.textContent = 'cargando…';
+    const tableEl = document.getElementById('hcda-resumen-table');
+    mini.innerHTML = '<div class="hr-stat" style="grid-column:1/-1"><div class="k">cargando…</div></div>';
+    // Sobrevuelos (ortofotos) de la hacienda + tipo
+    const rasters = relatedLayers(matchName).filter(l => l.subtype === 'raster');
+    const vuelos = new Set(rasters.map(ortoDateKey));
+    const tipo = !rasters.length ? '—' : (rasters.some(l => /multi|ndvi|ndre/i.test(l.alternate)) ? 'RGB+Multi' : 'RGB');
     try {
         const r = await fetch(`/api/v1/haciendas/lotes?nombre=${encodeURIComponent(matchName)}`);
         const lotes = r.ok ? await r.json() : [];
-        if (!lotes.length) { stats.textContent = 'Sin lotes registrados.'; chartEl.style.display = 'none'; return; }
-        const total = lotes.reduce((s, x) => s + (x.area_ha || 0), 0);
-        stats.innerHTML = `<b>${lotes.length}</b> lotes · <b>${total.toFixed(1)}</b> ha`;
-        chartEl.style.display = 'block';
-        if (!chartLotes) chartLotes = echarts.init(chartEl);
-        const PAL = ['#1B7A40','#2E9E57','#5FB87C','#8Fd0a3','#E32630','#f0883e','#F5C518','#3498db','#9b59b6','#16a085','#27ae60','#e67e22'];
-        // lotes viene ordenado por área desc; con muchos lotes agrupamos top 12 + "Otros"
-        const TOP = 12;
-        const pieData = lotes.slice(0, TOP).map((x, i) => ({ name: x.lote, value: +x.area_ha.toFixed(2), itemStyle: { color: PAL[i % PAL.length] } }));
-        if (lotes.length > TOP) {
-            const rest = lotes.slice(TOP).reduce((s, x) => s + (x.area_ha || 0), 0);
-            pieData.push({ name: `Otros (${lotes.length - TOP})`, value: +rest.toFixed(2), itemStyle: { color: '#b8c2b5' } });
+        if (!lotes.length) {
+            mini.innerHTML = `<div class="hr-stat" style="grid-column:1/-1"><div class="v">${vuelos.size || 0}</div><div class="k">Sobrevuelos · sin lotes registrados</div></div>`;
+            chartEl.style.display = 'none'; tableEl.style.display = 'none';
+            document.querySelector('#hcda-resumen .hr-toggle').style.display = 'none';
+            document.querySelector('#hcda-resumen .hr-cap').style.display = 'none';
+            return;
         }
-        chartLotes.setOption({
-            tooltip: { trigger: 'item', formatter: '{b}: {c} ha ({d}%)' },
-            legend: { show: false },
-            series: [{
-                type: 'pie', radius: ['38%', '70%'], center: ['50%', '52%'],
-                data: pieData,
-                label: { fontSize: 9, formatter: '{b}' },
-                labelLine: { length: 4, length2: 4 }
-            }]
-        });
-        setTimeout(() => chartLotes.resize(), 50);
-    } catch (e) { stats.textContent = 'No se pudo cargar el resumen.'; chartEl.style.display = 'none'; }
+        document.querySelector('#hcda-resumen .hr-toggle').style.display = 'flex';
+        const areas = lotes.map(x => x.area_ha || 0);
+        const total = areas.reduce((s, x) => s + x, 0);
+        const n = lotes.length, avg = total / n;
+        const mn = Math.min(...areas), mx = Math.max(...areas);
+        mini.innerHTML = [
+            ['Área total', total.toFixed(1) + ' ha'],
+            ['Lotes', n],
+            ['Prom/lote', avg.toFixed(2) + ' ha'],
+            ['Mín lote', mn.toFixed(2) + ' ha'],
+            ['Máx lote', mx.toFixed(2) + ' ha'],
+            ['Sobrevuelos', (vuelos.size || 0) + (tipo !== '—' ? ' · ' + tipo : '')],
+        ].map(([k, v]) => `<div class="hr-stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+        // Tabla de lotes (lote · ha · %)
+        tableEl.innerHTML = '<table><thead><tr><th>Lote</th><th class="n">ha</th><th class="n">%</th></tr></thead><tbody>' +
+            lotes.map(x => `<tr><td>${x.lote}</td><td class="n">${x.area_ha.toFixed(2)}</td><td class="n">${(x.area_ha / total * 100).toFixed(1)}</td></tr>`).join('') +
+            '</tbody></table>';
+        renderResumenPie(lotes);
+        setResumenView(resumenView);
+    } catch (e) {
+        mini.innerHTML = '<div class="hr-stat" style="grid-column:1/-1"><div class="k">No se pudo cargar el resumen.</div></div>';
+        chartEl.style.display = 'none'; tableEl.style.display = 'none';
+    }
+}
+
+function renderResumenPie(lotes) {
+    const chartEl = document.getElementById('hcda-resumen-chart');
+    if (!chartLotes) chartLotes = echarts.init(chartEl);
+    const total = lotes.reduce((s, x) => s + (x.area_ha || 0), 0);
+    const TOP = 12;   // con muchos lotes agrupamos top 12 + "Otros"
+    const pieData = lotes.slice(0, TOP).map((x, i) => ({ name: x.lote, value: +x.area_ha.toFixed(2), itemStyle: { color: RES_PAL[i % RES_PAL.length] } }));
+    if (lotes.length > TOP) {
+        const rest = lotes.slice(TOP).reduce((s, x) => s + (x.area_ha || 0), 0);
+        pieData.push({ name: `Otros (${lotes.length - TOP})`, value: +rest.toFixed(2), itemStyle: { color: '#b8c2b5' } });
+    }
+    chartLotes.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ha ({d}%)' },
+        legend: { show: false },
+        series: [{ type: 'pie', radius: ['38%', '70%'], center: ['50%', '52%'], data: pieData, label: { fontSize: 9, formatter: '{b}' }, labelLine: { length: 4, length2: 4 } }]
+    });
+    setTimeout(() => chartLotes.resize(), 50);
+}
+
+function setResumenView(v) {
+    resumenView = v;
+    document.getElementById('hr-tab-pie').classList.toggle('active', v === 'pie');
+    document.getElementById('hr-tab-table').classList.toggle('active', v === 'table');
+    document.getElementById('hcda-resumen-chart').style.display = v === 'pie' ? 'block' : 'none';
+    document.getElementById('hcda-resumen-table').style.display = v === 'table' ? 'block' : 'none';
+    document.querySelector('#hcda-resumen .hr-cap').style.display = v === 'pie' ? 'block' : 'none';
+    if (v === 'pie' && chartLotes) setTimeout(() => chartLotes.resize(), 30);
 }
 
 // Retira las capas de una pestaña al salir de ella. Los LOTES NO se quitan (van en todas).
@@ -1686,6 +1742,10 @@ document.getElementById('swipe-close').addEventListener('click', closeSwipe);
         ov.style.display = 'none';
     });
 })();
+
+// Toggle Dona / Tabla de la ficha de hacienda
+document.getElementById('hr-tab-pie')?.addEventListener('click', () => setResumenView('pie'));
+document.getElementById('hr-tab-table')?.addEventListener('click', () => setResumenView('table'));
 
 // --- GO ---
 map.on('load', loadAll);
