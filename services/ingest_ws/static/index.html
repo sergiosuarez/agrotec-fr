@@ -244,6 +244,17 @@
         }
         .mini-dot.sel { width: 16px; height: 16px; background: var(--palmar-red); box-shadow: 0 0 4px rgba(0,0,0,.7); }
 
+        /* Timeslider de ortofotos (overlay inferior-centro del mapa) */
+        #orto-timeslider {
+            position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+            z-index: 6; background: var(--panel); backdrop-filter: blur(4px);
+            border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.25); width: min(440px, 70vw);
+        }
+        #orto-timeslider .ots-head { font-size: .8rem; color: var(--palmar-green-dark); text-align: center; margin-bottom: 4px; }
+        #orto-timeslider #ots-range { width: 100%; accent-color: var(--palmar-green); cursor: pointer; }
+        #orto-timeslider .ots-ticks { display: flex; justify-content: space-between; font-size: .6rem; color: var(--muted); margin-top: 2px; }
+
         /* ============================================================== */
         /*  RESPONSIVE — móvil / tablet angosta (≤ 768px)                 */
         /*  El sidebar de 340px fijos se comía la pantalla. En móvil el   */
@@ -343,6 +354,7 @@
             <div class="mode-tab active" data-mode="cartografia">🗺 Cartografía</div>
             <div class="mode-tab" data-mode="ortofoto">🛩 Ortofoto</div>
             <div class="mode-tab" data-mode="multiespectral">🌈 Multiespectral</div>
+            <div class="mode-tab" data-mode="multitemporal">🕓 Multitemporal</div>
         </div>
     </div>
     <div id="app">
@@ -410,6 +422,16 @@
             </div>
         </div>
 
+        <!-- ===== Modo: Multitemporal (comparación de vuelos por fecha) ===== -->
+        <div id="mode-multitemporal" class="mode-panel">
+            <div class="mode-scroll">
+                <div class="mode-intro">Compara una hacienda entre <b>distintas fechas</b> de vuelo con una cortina deslizante. Aquí solo aparecen las haciendas con <b>2 o más ortofotos</b> (independiente del filtro de arriba).</div>
+                <label class="of-label">Hacienda con multitemporal</label>
+                <select id="mt-hacienda"><option value="">— cargando… —</option></select>
+                <div id="mt-body"><div class="empty">Elige una hacienda de la lista para comparar sus vuelos.</div></div>
+            </div>
+        </div>
+
         <!-- ===== Modo: Meteorología (capas GFS) ===== -->
         <div id="mode-meteorologia" class="mode-panel">
             <div class="mode-scroll">
@@ -459,6 +481,13 @@
 
         <!-- Mini-mapa locator (estilo CMET): todas las haciendas; resalta la seleccionada -->
         <div id="minimap"><div class="mini-title">Haciendas</div></div>
+
+        <!-- Timeslider de ortofotos: aparece en Ortofoto cuando la hacienda tiene 2+ vuelos -->
+        <div id="orto-timeslider" style="display:none">
+            <div class="ots-head">🛩 <b id="ots-label"></b></div>
+            <input type="range" id="ots-range" min="0" max="0" step="1" value="0">
+            <div id="ots-ticks" class="ots-ticks"></div>
+        </div>
 
         <!-- Cortina de comparación de ortofotos (swipe): 2 mapas sincronizados + barra -->
         <div id="swipe-container" style="display:none">
@@ -1491,7 +1520,7 @@ window.addEventListener('resize', () => { chartPron?.resize(); chartProf?.resize
 // El mapa es compartido; cada modo cambia el contenido del sidebar.
 // ============================================================================
 let currentMode = 'cartografia';
-const MODES = ['cartografia', 'ortofoto', 'multiespectral'];
+const MODES = ['cartografia', 'ortofoto', 'multiespectral', 'multitemporal'];
 
 function setMode(mode) {
     if (mode === currentMode) return;
@@ -1524,6 +1553,7 @@ function applyHaciendaToActiveTab() {
     refreshHaciendaLayers();                         // filtra lotes y puntos de control a esta hacienda
     if (currentMode === 'cartografia') loadCartoVectors(matchName);
     else if (currentMode === 'ortofoto') showOrtoForHacienda(matchName);
+    else if (currentMode === 'multitemporal') showMultitemporal();
     if (h) map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: currentMode === 'ortofoto' ? 50 : 60, maxZoom: currentMode === 'ortofoto' ? 18 : 16 });
     else fitHaciendasAll();
     bringLotesToTop();
@@ -1615,13 +1645,14 @@ function setResumenView(v) {
 // Retira las capas de una pestaña al salir de ella. Los LOTES NO se quitan (van en todas).
 function removeTabLayers(mode) {
     if (mode === 'cartografia') clearAutoRelated();
-    else if (mode === 'ortofoto') { closeSwipe(); clearOrtoShown(); }
-    else if (mode === 'meteorologia') Object.keys(state.activeLayers).filter(a => a.startsWith('gfs:')).forEach(a => removeWmsLayer(a));
+    else if (mode === 'ortofoto') { closeSwipe(); clearOrtoShown(); hideOrtoSlider(); }
+    else if (mode === 'multitemporal') { closeSwipe(); clearOrtoShown(); }
 }
 
 // --- Modo Ortofoto: estado ---
-let ortoShown = [];   // alternates de ortofotos mostradas por este modo
-let ortoList = [];    // ortofotos (raster) de la hacienda actual
+let ortoShown = [];          // alternates de ortofotos mostradas por este modo
+let ortoList = [];           // ortofotos (raster) de la hacienda actual
+let ortoByDate = {}, ortoDates = [], ortoIdx = 0;   // agrupadas por fecha + índice activo (timeslider)
 
 function clearOrtoShown() {
     ortoShown.forEach(a => { if (state.activeLayers[a]) removeWmsLayer(a); });
@@ -1638,51 +1669,92 @@ function fmtOrtoDate(k) {
 function showOrtoForHacienda(matchName) {
     closeSwipe();
     clearOrtoShown();
+    hideOrtoSlider();
     const body = document.getElementById('orto-body');
-    if (!matchName) { body.innerHTML = '<div class="empty">Elige una hacienda (en el panel izquierdo) para ver su ortofoto.</div>'; return; }
-    // el zoom lo hace applyHaciendaToActiveTab (con el bbox real del límite)
+    if (!matchName) { body.innerHTML = '<div class="empty">Elige una hacienda en el panel izquierdo para ver su ortofoto.</div>'; return; }
     ortoList = relatedLayers(matchName).filter(l => l.subtype === 'raster');
     if (!ortoList.length) { body.innerHTML = '<div class="empty">No hay ortofoto cargada para esta hacienda todavía.</div>'; return; }
-    // Agrupar por FECHA del vuelo (campo Date de GeoNode). Varias piezas con la misma
-    // fecha = mosaico de un vuelo; fechas distintas = comparación temporal.
-    const byDate = {};
-    ortoList.forEach(l => { (byDate[ortoDateKey(l)] ||= []).push(l); });
-    const dates = Object.keys(byDate).sort();   // asc; última = más reciente
-    const latest = dates[dates.length - 1];     // Ortofoto = vuelo más reciente (mosaico)
-    renderOrtoMosaic(byDate[latest], latest);
-    if (dates.length >= 2) appendComparator(byDate, dates);   // comparación temporal en el mismo panel
+    // Agrupar por FECHA del vuelo. Se muestra UNA fecha a la vez (coherente con el timeslider).
+    ortoByDate = {};
+    ortoList.forEach(l => { (ortoByDate[ortoDateKey(l)] ||= []).push(l); });
+    ortoDates = Object.keys(ortoByDate).sort();   // asc; última = más reciente
+    showOrtoDate(ortoDates.length - 1);           // arranca en el vuelo más reciente
+    if (ortoDates.length >= 2) showOrtoSlider();   // timeslider para recorrer fechas
 }
 
-// Una sola fecha (o sin fecha): muestra todas las piezas juntas (mosaico)
-function renderOrtoMosaic(list, dateKey) {
-    list.forEach(l => { if (!state.activeLayers[l.alternate]) { addWmsLayer(l); ortoShown.push(l.alternate); } });
-    const multi = list.length > 1;
+// Muestra UNA sola fecha de vuelo (su mosaico de piezas)
+function showOrtoDate(i) {
+    if (i < 0 || i >= ortoDates.length) return;
+    ortoIdx = i;
+    clearOrtoShown();
+    const dk = ortoDates[i];
+    ortoByDate[dk].forEach(l => { addWmsLayer(l); ortoShown.push(l.alternate); });
+    bringLotesToTop();
+    const multi = ortoByDate[dk].length > 1;
     document.getElementById('orto-body').innerHTML =
-        `<div class="of-label">Ortofoto${dateKey && dateKey !== 'sin-fecha' ? ' — ' + fmtOrtoDate(dateKey) : ''}${multi ? ` (mosaico, ${list.length} piezas)` : ''}</div>` +
-        list.map(o => `<div class="of-card"><div class="of-name">${o.title}</div><div class="of-meta">${o.alternate.split(':').pop()}</div></div>`).join('') +
+        `<div class="of-label">Ortofoto — ${fmtOrtoDate(dk)}</div>` +
+        `<div class="of-meta">Vuelo ${i + 1} de ${ortoDates.length}${multi ? ` · mosaico (${ortoByDate[dk].length} piezas)` : ''}</div>` +
+        (ortoDates.length >= 2 ? '<div class="of-hint">🛩 Usa el control de tiempo (abajo, en el mapa) para recorrer los vuelos. La comparación A↔B está en la pestaña <b>Multitemporal</b>.</div>' : '') +
         `<div class="opacity-row" style="padding-left:0"><span>opacidad</span><input type="range" id="orto-op" min="0" max="100" value="100"></div>`;
     document.getElementById('orto-op').addEventListener('input', e => ortoShown.forEach(a => setOpacity(a, e.target.value / 100)));
+    const r = document.getElementById('ots-range'); if (r) r.value = i;
+    const lab = document.getElementById('ots-label'); if (lab) lab.textContent = fmtOrtoDate(dk);
 }
 
-// Sección de comparación temporal DENTRO del panel de Ortofoto (aparece solo si la
-// hacienda tiene 2+ fechas de vuelo): elige A (anterior) y B (reciente) y abre la cortina.
-function appendComparator(byDate, dates, ai, bi) {
-    if (ai == null) ai = 0;                    // por defecto: más antigua
-    if (bi == null) bi = dates.length - 1;     // vs más reciente
-    let div = document.getElementById('orto-compare');
-    if (!div) { div = document.createElement('div'); div.id = 'orto-compare'; document.getElementById('orto-body').appendChild(div); }
+function showOrtoSlider() {
+    const el = document.getElementById('orto-timeslider'); if (!el) return;
+    const r = document.getElementById('ots-range');
+    r.min = 0; r.max = ortoDates.length - 1; r.step = 1; r.value = ortoIdx;
+    document.getElementById('ots-ticks').innerHTML = ortoDates.map(d => `<span>${fmtOrtoDate(d)}</span>`).join('');
+    document.getElementById('ots-label').textContent = fmtOrtoDate(ortoDates[ortoIdx]);
+    el.style.display = 'block';
+}
+function hideOrtoSlider() { const el = document.getElementById('orto-timeslider'); if (el) el.style.display = 'none'; }
+
+// ===== Modo Multitemporal: lista SOLO haciendas con 2+ vuelos (indep. del filtro global) =====
+function ortoDatesOf(h) {
+    const mn = h.nombre.replace(/[-_\s]*\d+$/, '');
+    return new Set(relatedLayers(mn).filter(l => l.subtype === 'raster').map(ortoDateKey));
+}
+function showMultitemporal() {
+    const sel = document.getElementById('mt-hacienda');
+    if (!sel) return;
+    const multi = haciendas.filter(h => ortoDatesOf(h).size >= 2);
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— Elige una hacienda —</option>' +
+        multi.map(h => `<option value="${h.codigo}">${h.nombre}</option>`).join('');
+    if (prev && multi.some(h => h.codigo === prev)) sel.value = prev;
+    if (!multi.length) document.getElementById('mt-body').innerHTML = '<div class="empty">Aún no hay haciendas con 2+ vuelos para comparar.</div>';
+}
+function mtSelect(codigo) {
+    closeSwipe(); clearOrtoShown();
+    const body = document.getElementById('mt-body');
+    const h = codigo ? haciendas.find(x => x.codigo === codigo) : null;
+    if (!h) { body.innerHTML = '<div class="empty">Elige una hacienda de la lista para comparar sus vuelos.</div>'; return; }
+    const mn = h.nombre.replace(/[-_\s]*\d+$/, '');
+    const byDate = {};
+    relatedLayers(mn).filter(l => l.subtype === 'raster').forEach(l => { (byDate[ortoDateKey(l)] ||= []).push(l); });
+    const dates = Object.keys(byDate).sort();
+    map.fitBounds([[h.bbox[0], h.bbox[1]], [h.bbox[2], h.bbox[3]]], { padding: 50, maxZoom: 18 });
+    renderMtComparator(h, byDate, dates);
+}
+function renderMtComparator(h, byDate, dates, ai, bi) {
+    closeSwipe(); clearOrtoShown();
+    if (ai == null) ai = 0;
+    if (bi == null) bi = dates.length - 1;
+    byDate[dates[bi]].forEach(l => { addWmsLayer(l); ortoShown.push(l.alternate); });
+    bringLotesToTop();
     const opts = (sel) => dates.map((d, i) => `<option value="${i}" ${sel === i ? 'selected' : ''}>${fmtOrtoDate(d)}</option>`).join('');
-    div.innerHTML =
-        `<div class="of-label" style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">🕓 Comparación temporal (${dates.length} fechas)</div>` +
-        `<div class="of-label">A — anterior (izquierda)</div><select id="orto-a">${opts(ai)}</select>` +
-        `<div class="of-label">B — reciente (derecha)</div><select id="orto-b">${opts(bi)}</select>` +
-        `<button class="of-btn" id="orto-swipe">🪟 Comparar con cortina</button>` +
-        `<div class="of-hint">Abre una barra arrastrable: a la izquierda la fecha A, a la derecha la B.</div>`;
-    const reRender = () => appendComparator(byDate, dates,
-        +document.getElementById('orto-a').value, +document.getElementById('orto-b').value);
-    document.getElementById('orto-a').addEventListener('change', reRender);
-    document.getElementById('orto-b').addEventListener('change', reRender);
-    document.getElementById('orto-swipe').addEventListener('click', () =>
+    document.getElementById('mt-body').innerHTML =
+        `<div class="of-label">🕓 ${h.nombre} — ${dates.length} vuelos</div>` +
+        `<div class="of-label">A — anterior (izquierda)</div><select id="mt-a">${opts(ai)}</select>` +
+        `<div class="of-label">B — reciente (derecha)</div><select id="mt-b">${opts(bi)}</select>` +
+        `<button class="of-btn" id="mt-swipe">🪟 Comparar con cortina</button>` +
+        `<div class="of-hint">Arrastra la barra: izquierda = fecha A, derecha = fecha B.</div>`;
+    const re = () => renderMtComparator(h, byDate, dates, +document.getElementById('mt-a').value, +document.getElementById('mt-b').value);
+    document.getElementById('mt-a').addEventListener('change', re);
+    document.getElementById('mt-b').addEventListener('change', re);
+    document.getElementById('mt-swipe').addEventListener('click', () =>
         openSwipe(byDate[dates[ai]], byDate[dates[bi]], fmtOrtoDate(dates[ai]), fmtOrtoDate(dates[bi])));
 }
 
@@ -1740,6 +1812,36 @@ document.getElementById('swipe-close').addEventListener('click', closeSwipe);
 // Toggle Dona / Tabla de la ficha de hacienda
 document.getElementById('hr-tab-pie')?.addEventListener('click', () => setResumenView('pie'));
 document.getElementById('hr-tab-table')?.addEventListener('click', () => setResumenView('table'));
+
+// Timeslider de ortofotos
+document.getElementById('ots-range')?.addEventListener('input', e => showOrtoDate(+e.target.value));
+
+// Selector de la pestaña Multitemporal (independiente del filtro global)
+document.getElementById('mt-hacienda')?.addEventListener('change', e => mtSelect(e.target.value));
+
+// Mini-mapa arrastrable (por su barra de título) para que no tape el contenido
+(function makeMinimapDraggable() {
+    const mm = document.getElementById('minimap');
+    const wrap = document.getElementById('map-wrap');
+    const handle = mm?.querySelector('.mini-title');
+    if (!mm || !wrap || !handle) return;
+    handle.style.cursor = 'move';
+    handle.title = 'Arrastra para mover el mini-mapa';
+    let drag = false, sx = 0, sy = 0, ox = 0, oy = 0;
+    const start = (cx, cy) => {
+        const r = mm.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+        ox = r.left - wr.left; oy = r.top - wr.top;
+        mm.style.left = ox + 'px'; mm.style.top = oy + 'px'; mm.style.right = 'auto'; mm.style.bottom = 'auto';
+        sx = cx; sy = cy; drag = true;
+    };
+    const move = (cx, cy) => { if (!drag) return; mm.style.left = (ox + cx - sx) + 'px'; mm.style.top = (oy + cy - sy) + 'px'; };
+    handle.addEventListener('mousedown', e => { start(e.clientX, e.clientY); e.preventDefault(); });
+    window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+    window.addEventListener('mouseup', () => drag = false);
+    handle.addEventListener('touchstart', e => { const t = e.touches[0]; start(t.clientX, t.clientY); }, { passive: true });
+    window.addEventListener('touchmove', e => { if (drag) { const t = e.touches[0]; move(t.clientX, t.clientY); } }, { passive: true });
+    window.addEventListener('touchend', () => drag = false);
+})();
 
 // --- GO ---
 map.on('load', loadAll);
