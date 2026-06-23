@@ -355,6 +355,7 @@
             <div class="mode-tab" data-mode="ortofoto">🛩 Ortofoto</div>
             <div class="mode-tab" data-mode="multiespectral">🌈 Multiespectral</div>
             <div class="mode-tab" data-mode="multitemporal">🕓 Multitemporal</div>
+            <div class="mode-tab" data-mode="meteorologia" id="tab-meteo">🌦 Meteorología</div>
         </div>
     </div>
     <div id="app">
@@ -388,6 +389,10 @@
                 <div class="category">
                     <h2>Servicios</h2>
                     <div id="health-box"><div class="loading">cargando…</div></div>
+                </div>
+                <div class="category">
+                    <h2>Meteorología GFS</h2>
+                    <div id="gfs-box"><div class="loading">cargando…</div></div>
                 </div>
             </div>
         </div>
@@ -882,9 +887,11 @@ function bringLotesToTop() {
 async function loadAll() {
     try {
         const r = await fetch(`${API}/api/v1/layers`);
-        // Meteorología (GFS) DESHABILITADA por ahora: filtramos esas capas para no
-        // mostrarlas ni traer datos de THREDDS (ralentizaban la carga, alta resolución).
-        state.layers = (await r.json()).filter(l => l.category !== 'meteorologia' && !l.alternate.startsWith('gfs:'));
+        let layers = await r.json();
+        // Si Meteorología está apagada, filtramos las capas GFS (no se traen de THREDDS).
+        if (!METEO_ENABLED) layers = layers.filter(l => l.category !== 'meteorologia' && !l.alternate.startsWith('gfs:'));
+        state.layers = layers;
+        if (METEO_ENABLED) await loadGfsTimes();   // pasos de tiempo GFS (antes de activar featured)
         await loadHaciendas();  // carga el catalogo de haciendas (sin encuadrar todavia)
         initMinimap();          // mini-mapa locator con todas las haciendas
         renderLayersTab();
@@ -900,7 +907,8 @@ async function loadAll() {
     } catch (e) {
         document.getElementById('tab-layers').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
     }
-    loadHealth();   // GFS deshabilitado: no se llama loadGFS()
+    loadHealth();
+    if (METEO_ENABLED) loadGFS();
 }
 
 const CAT_LABELS = { meteorologia: '🌦 Meteorología GFS', ortomosaicos: '🛩 Ortomosaicos drone', haciendas: '🌾 Haciendas y lotes', vectoriales: '📐 Vectoriales', limites: '🗺 Límites administrativos', infraestructura: '🛣 Infraestructura', raster_otros: '🖼 Otros rasters', otros: '📦 Otros' };
@@ -1520,7 +1528,11 @@ window.addEventListener('resize', () => { chartPron?.resize(); chartProf?.resize
 // El mapa es compartido; cada modo cambia el contenido del sidebar.
 // ============================================================================
 let currentMode = 'cartografia';
-const MODES = ['cartografia', 'ortofoto', 'multiespectral', 'multitemporal'];
+// Flag para prender/apagar Meteorología (GFS). Apagarlo = poner en false (oculta la
+// pestaña, no trae datos de THREDDS). El backend y THREDDS quedan intactos igual.
+const METEO_ENABLED = true;
+const MODES = ['cartografia', 'ortofoto', 'multiespectral', 'multitemporal', ...(METEO_ENABLED ? ['meteorologia'] : [])];
+if (!METEO_ENABLED) { const t = document.getElementById('tab-meteo'); if (t) t.style.display = 'none'; }
 
 function setMode(mode) {
     if (mode === currentMode) return;
@@ -1647,6 +1659,7 @@ function removeTabLayers(mode) {
     if (mode === 'cartografia') clearAutoRelated();
     else if (mode === 'ortofoto') { closeSwipe(); clearOrtoShown(); hideOrtoSlider(); }
     else if (mode === 'multitemporal') { closeSwipe(); clearOrtoShown(); }
+    else if (mode === 'meteorologia') Object.keys(state.activeLayers).filter(a => a.startsWith('gfs:')).forEach(a => removeWmsLayer(a));
 }
 
 // --- Modo Ortofoto: estado ---
