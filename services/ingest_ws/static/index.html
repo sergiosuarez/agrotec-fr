@@ -177,6 +177,12 @@
         .popup-body td { padding: 2px 4px; border-bottom: 1px solid #eee; }
         .popup-body td:first-child { color: var(--muted); font-size: .72rem; }
         .popup-body td:last-child { font-weight: 500; word-break: break-word; }
+        .popup-pdf-slot { margin-top: 8px; font-size: .75rem; }
+        .popup-pdf { display: inline-block; background: var(--palmar-red); color: #fff !important; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-weight: 600; }
+        .popup-pdf-none { color: var(--muted); font-style: italic; }
+        .of-overlays { background: #f4f8f2; border: 1px solid var(--border); border-radius: 5px; padding: 7px 9px; margin-bottom: 8px; font-size: .8rem; }
+        .of-overlays-tit { display: block; font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 3px; }
+        .of-overlays label { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; cursor: pointer; }
 
         /* --- ADMIN MODAL --- */
         #admin-overlay { display: none; position: fixed; inset: 0; background: #00000080; z-index: 100; align-items: center; justify-content: center; }
@@ -383,7 +389,12 @@
         <!-- ===== Modo: Ortofoto Haciendas ===== -->
         <div id="mode-ortofoto" class="mode-panel">
             <div class="mode-scroll">
-                <div class="mode-intro">Ortofoto de la hacienda seleccionada (selector en el panel izquierdo). Si tiene varias piezas se muestran juntas como mosaico.</div>
+                <div class="mode-intro">Ortofoto de la hacienda seleccionada. Si tiene 2+ vuelos, usa el control de tiempo en el mapa.</div>
+                <div class="of-overlays">
+                    <span class="of-overlays-tit">Capas sobre la ortofoto:</span>
+                    <label><input type="checkbox" id="orto-show-lotes" checked> Lotes</label>
+                    <label><input type="checkbox" id="orto-show-puntos" checked> Puntos de control</label>
+                </div>
                 <div id="orto-body"><div class="empty">Elige una hacienda (en el panel izquierdo) para ver su ortofoto.</div></div>
             </div>
         </div>
@@ -1039,28 +1050,68 @@ function changeBasemap(key) {
     });
 }
 
-// --- Click en mapa: probar TODAS las capas vectoriales activas, mostrar popup con la primera que tenga feature ---
+// --- Configuración de popups por capa (título, etiquetas, campos ocultos, PDF) ---
+const POPUP_CONFIG = {
+    'geonode:puntos_de_control_base': {
+        titleField: 'codigo',
+        fields: { codigo: 'CÓDIGO', punto: 'PUNTO', este: 'COORDENADA ESTE', norte: 'COORDENADA NORTE', cota: 'COTA' },
+        order: ['codigo', 'punto', 'este', 'norte', 'cota'],
+        pdfByField: 'codigo',      // enlaza al documento de GeoNode cuyo título = código (ej. SIGCA-46)
+        tolerance: 0.0009          // más tolerancia: los puntos son fáciles de errar
+    },
+    'geonode:haciendas_totales': {
+        titleField: 'nombre', alias: 'Hacienda',
+        fields: { nombre_hcd: 'NOMBRE', area_ha: 'ÁREA (HA)' },
+        order: ['nombre_hcd', 'area_ha']
+    }
+};
+
+function buildPopupHTML(alt, props) {
+    const cfg = POPUP_CONFIG[alt] || {};
+    const title = (cfg.titleField && props[cfg.titleField]) ? props[cfg.titleField] : (cfg.alias || alt.split(':').pop());
+    const keys = cfg.order ? cfg.order.filter(k => k in props)
+        : Object.keys(props).filter(k => !/the_geom|geometry|bbox/.test(k));
+    const labelOf = k => (cfg.fields && cfg.fields[k]) ? cfg.fields[k] : k.toUpperCase();
+    const rows = keys.map(k => `<tr><td>${labelOf(k)}</td><td>${props[k] ?? '-'}</td></tr>`).join('');
+    const pdf = cfg.pdfByField && props[cfg.pdfByField] ? '<div id="popup-pdf-slot" class="popup-pdf-slot">📄 buscando ficha…</div>' : '';
+    return `<div class="popup-header">${title}</div><div class="popup-body">${rows ? `<table>${rows}</table>` : '<em>Sin atributos</em>'}${pdf}</div>`;
+}
+
+// Busca en GeoNode el documento (PDF) cuyo título coincide con el código del punto y lo enlaza
+async function attachPdfLink(popup, codigo) {
+    const slot = () => popup.getElement()?.querySelector('#popup-pdf-slot');
+    try {
+        const r = await fetch(`/api/v2/documents?search=${encodeURIComponent(codigo)}&page_size=10`, { headers: { Accept: 'application/json' } });
+        const docs = (await r.json()).documents || [];
+        const doc = docs.find(d => (d.title || '').trim().toLowerCase() === codigo.trim().toLowerCase());
+        const el = slot(); if (!el) return;
+        if (doc) {
+            const url = doc.download_url || doc.href || `/documents/${doc.pk}`;
+            el.innerHTML = `<a class="popup-pdf" href="${url}" target="_blank" rel="noopener">📄 Ver ficha técnica (PDF)</a>`;
+        } else {
+            el.innerHTML = '<span class="popup-pdf-none">📄 Ficha técnica: no disponible aún</span>';
+        }
+    } catch (e) { const el = slot(); if (el) el.innerHTML = ''; }
+}
+
+// --- Click en mapa: prioriza PUNTOS de control, luego el resto de vectores ---
 map.on('click', async e => {
-    if (currentMode === 'meteorologia') return;   // en Meteorología, el clic abre el pronóstico (no popup de lote)
+    if (currentMode === 'meteorologia') return;   // en Meteorología, el clic abre el pronóstico
     const vectorLayers = Object.entries(state.activeLayers).filter(([_, i]) => i.subtype === 'vector');
     if (vectorLayers.length === 0) return;
+    // prioridad: puntos de control primero (su popup gana sobre el polígono de la hacienda)
+    vectorLayers.sort((a, b) => (b[0] === PUNTOS_ALT ? 1 : 0) - (a[0] === PUNTOS_ALT ? 1 : 0));
     const lat = e.lngLat.lat, lng = e.lngLat.lng;
-    // Probar cada capa vector activa, tomar la PRIMERA que devuelva un feature
     for (const [alt] of vectorLayers) {
         try {
-            const r = await fetch(`${API}/api/v1/feature-info?layer=${encodeURIComponent(alt)}&lat=${lat}&lng=${lng}`);
+            const tol = POPUP_CONFIG[alt]?.tolerance;
+            const r = await fetch(`${API}/api/v1/feature-info?layer=${encodeURIComponent(alt)}&lat=${lat}&lng=${lng}${tol ? `&tolerance=${tol}` : ''}`);
             const data = await r.json();
             if (data.features?.length > 0) {
-                const f = data.features[0];
-                const props = f.properties || {};
-                const rows = Object.entries(props)
-                    .filter(([k]) => !k.startsWith('the_geom') && !k.startsWith('geometry') && k !== 'bbox')
-                    .map(([k, v]) => `<tr><td>${k}</td><td>${v ?? '-'}</td></tr>`).join('');
-                const title = alt.split(':').pop();
-                new maplibregl.Popup({ maxWidth: '360px' }).setLngLat(e.lngLat).setHTML(`
-                    <div class="popup-header">${title}</div>
-                    <div class="popup-body">${rows ? `<table>${rows}</table>` : '<em>Sin atributos</em>'}</div>
-                `).addTo(map);
+                const props = data.features[0].properties || {};
+                const popup = new maplibregl.Popup({ maxWidth: '360px' }).setLngLat(e.lngLat).setHTML(buildPopupHTML(alt, props)).addTo(map);
+                const cfg = POPUP_CONFIG[alt];
+                if (cfg?.pdfByField && props[cfg.pdfByField]) attachPdfLink(popup, String(props[cfg.pdfByField]));
                 return;  // primer match gana
             }
         } catch (err) { console.warn(`feature-info ${alt} error:`, err); }
@@ -1670,6 +1721,7 @@ function showOrtoForHacienda(matchName) {
     ortoDates = Object.keys(ortoByDate).sort();   // asc; última = más reciente
     showOrtoDate(ortoDates.length - 1);           // arranca en el vuelo más reciente
     if (ortoDates.length >= 2) showOrtoSlider();   // timeslider para recorrer fechas
+    ensureOrtoOverlays();                          // lotes + puntos sobre la ortofoto (según toggles)
 }
 
 // Muestra UNA sola fecha de vuelo (su mosaico de piezas)
@@ -1700,6 +1752,19 @@ function showOrtoSlider() {
     el.style.display = 'block';
 }
 function hideOrtoSlider() { const el = document.getElementById('orto-timeslider'); if (el) el.style.display = 'none'; }
+
+// Toggles de capas (Lotes / Puntos de control) sobre la ortofoto
+function toggleOrtoOverlay(alt, on) {
+    const layer = state.layers.find(l => l.alternate === alt);
+    if (!layer) return;
+    if (on && !state.activeLayers[alt]) addWmsLayer(layer);
+    else if (!on && state.activeLayers[alt]) removeWmsLayer(alt);
+    bringLotesToTop();
+}
+function ensureOrtoOverlays() {
+    toggleOrtoOverlay(LOTES_ALT, document.getElementById('orto-show-lotes')?.checked !== false);
+    toggleOrtoOverlay(PUNTOS_ALT, document.getElementById('orto-show-puntos')?.checked !== false);
+}
 
 // ===== Modo Multitemporal: lista SOLO haciendas con 2+ vuelos (indep. del filtro global) =====
 function ortoDatesOf(h) {
@@ -1805,6 +1870,10 @@ document.getElementById('hr-tab-table')?.addEventListener('click', () => setResu
 
 // Timeslider de ortofotos
 document.getElementById('ots-range')?.addEventListener('input', e => showOrtoDate(+e.target.value));
+
+// Toggles de capas sobre la ortofoto
+document.getElementById('orto-show-lotes')?.addEventListener('change', e => toggleOrtoOverlay(LOTES_ALT, e.target.checked));
+document.getElementById('orto-show-puntos')?.addEventListener('change', e => toggleOrtoOverlay(PUNTOS_ALT, e.target.checked));
 
 // Selector de la pestaña Multitemporal (independiente del filtro global)
 document.getElementById('mt-hacienda')?.addEventListener('change', e => mtSelect(e.target.value));
