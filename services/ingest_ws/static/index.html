@@ -226,23 +226,6 @@
         /* Velo bajo el panel (solo móvil) — oculto en escritorio para no romper el grid */
         #sidebar-backdrop { display: none; }
 
-        /* Mini-mapa locator (overview de haciendas, estilo CMET) */
-        #minimap {
-            position: absolute; bottom: 16px; right: 16px;
-            width: 210px; height: 165px; z-index: 5;
-            border: 2px solid var(--palmar-green); border-radius: 6px;
-            overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.3); background: #e8eee6;
-        }
-        #minimap .mini-title {
-            position: absolute; top: 0; left: 0; right: 0; z-index: 2;
-            background: var(--palmar-green); color: #fff; font-size: .62rem;
-            text-align: center; padding: 2px 0; font-weight: 700; letter-spacing: .03em;
-        }
-        .mini-dot {
-            width: 9px; height: 9px; border-radius: 50%; background: var(--palmar-green);
-            border: 1.5px solid #fff; box-shadow: 0 0 2px rgba(0,0,0,.6); cursor: pointer;
-        }
-        .mini-dot.sel { width: 16px; height: 16px; background: var(--palmar-red); box-shadow: 0 0 4px rgba(0,0,0,.7); }
 
         /* Timeslider de ortofotos (overlay inferior-centro del mapa) */
         #orto-timeslider {
@@ -314,7 +297,6 @@
             #bottom-content { grid-template-columns: 1fr; grid-template-rows: 56% 44%; }
             #chart-pron-wrap { border-right: none; border-bottom: 1px solid var(--border); }
             #map-wrap.meteo-open #coords { bottom: calc(62vh + 10px); }
-            #minimap { display: none; }   /* el locator se oculta en móvil (poco espacio) */
         }
 
         /* ===== Popup de bienvenida ===== */
@@ -367,7 +349,7 @@
         <div id="mode-cartografia" class="mode-panel active">
 
         <div id="hcda-resumen" style="display:none;">
-            <div class="hr-title">🌴 <span id="hcda-resumen-nombre"></span></div>
+            <div class="hr-title">🌴 Áreas de Lotes — Hacienda <span id="hcda-resumen-nombre"></span></div>
             <div id="hcda-resumen-mini" class="hr-mini"></div>
             <div class="hr-toggle">
                 <button type="button" id="hr-tab-pie" class="hr-tab active">◔ Dona</button>
@@ -484,8 +466,6 @@
         </div>
         <div class="ml-overlay" id="coords">—</div>
 
-        <!-- Mini-mapa locator (estilo CMET): todas las haciendas; resalta la seleccionada -->
-        <div id="minimap"><div class="mini-title">Haciendas</div></div>
 
         <!-- Timeslider de ortofotos: aparece en Ortofoto cuando la hacienda tiene 2+ vuelos -->
         <div id="orto-timeslider" style="display:none">
@@ -799,45 +779,6 @@ function fitHaciendasAll() {
     if (b) map.fitBounds(b, { padding: 40 });
 }
 
-// ===== Mini-mapa locator (overview de todas las haciendas, estilo CMET) =====
-let miniMap = null, miniMarkers = [];
-function initMinimap() {
-    if (miniMap || !document.getElementById('minimap')) return;
-    miniMap = new maplibregl.Map({
-        container: 'minimap', style: basemapStyle('cartolight'),
-        attributionControl: false, center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM
-    });
-    // Interactivo (arrastrar/zoom para alcanzar haciendas apiñadas), pero sin rotación
-    miniMap.dragRotate.disable();
-    miniMap.touchZoomRotate.disableRotation();
-    miniMap.keyboard.disable();
-    miniMap.on('load', renderMinimap);
-}
-function renderMinimap() {
-    if (!miniMap || !haciendas.length) return;
-    miniMarkers.forEach(m => m.remove()); miniMarkers = [];
-    haciendas.forEach(h => {
-        const cx = (h.bbox[0] + h.bbox[2]) / 2, cy = (h.bbox[1] + h.bbox[3]) / 2;
-        const d = document.createElement('div');
-        d.className = 'mini-dot' + (h.codigo === selectedHacienda ? ' sel' : '');
-        d.title = h.nombre;
-        d.addEventListener('click', () => {   // clic en el locator → ir a esa hacienda
-            selectedHacienda = h.codigo;
-            const sel = document.getElementById('global-hacienda'); if (sel) sel.value = h.codigo;
-            applyHaciendaToActiveTab();
-        });
-        miniMarkers.push(new maplibregl.Marker({ element: d }).setLngLat([cx, cy]).addTo(miniMap));
-    });
-    const b = haciendasGlobalBounds();
-    // Más margen arriba para que las haciendas no queden bajo el título ni en el borde
-    if (b) miniMap.fitBounds(b, { padding: { top: 34, bottom: 20, left: 20, right: 20 }, duration: 0 });
-}
-function updateMinimapSelection() {
-    miniMarkers.forEach((m, i) => {
-        const h = haciendas[i];
-        if (h) m.getElement().classList.toggle('sel', h.codigo === selectedHacienda);
-    });
-}
 
 // Anexa un CQL_FILTER a una URL WMS de GeoServer
 function withCql(url, cql) { return url + '&CQL_FILTER=' + encodeURIComponent(cql); }
@@ -893,7 +834,6 @@ async function loadAll() {
         state.layers = layers;
         if (METEO_ENABLED) await loadGfsTimes();   // pasos de tiempo GFS (antes de activar featured)
         await loadHaciendas();  // carga el catalogo de haciendas (sin encuadrar todavia)
-        initMinimap();          // mini-mapa locator con todas las haciendas
         renderLayersTab();
         // Activar las featured automáticamente
         state.layers.filter(l => l.featured).forEach(l => addWmsLayer(l));
@@ -1088,8 +1028,15 @@ function changeBasemap(key) {
         newStyle.layers.push({ id: info.sourceId, type: 'raster', source: info.sourceId, paint: { 'raster-opacity': info.opacity } });
     });
     map.setStyle(newStyle);
-    // tras recargar el estilo: re-aplicar el filtro de hacienda a los lotes y subirlos arriba
-    map.once('idle', () => { applyLotesFilter(selectedHacienda); bringLotesToTop(); });
+    // Tras recargar el estilo, las capas se rearman SIN el CQL de hacienda. Forzamos
+    // re-aplicar el filtro reseteando el tracking de tiles (si no, el dedup cree que ya
+    // está filtrado y quedan TODAS las haciendas).
+    map.once('idle', () => {
+        [HACIENDAS_ALT, LOTES_ALT, PUNTOS_ALT].forEach(a => { if (state.activeLayers[a]) state.activeLayers[a].tilesUrl = null; });
+        applyLotesFilter(selectedHacienda);
+        refreshHaciendaLayers();
+        bringLotesToTop();
+    });
 }
 
 // --- Click en mapa: probar TODAS las capas vectoriales activas, mostrar popup con la primera que tenga feature ---
@@ -1570,11 +1517,42 @@ function applyHaciendaToActiveTab() {
     else fitHaciendasAll();
     bringLotesToTop();
     updateHaciendaResumen(matchName, h);             // tarjeta resumen + pie de área por lote
-    updateMinimapSelection();                        // resalta la hacienda activa en el locator
 }
 
 // ===== Resumen de hacienda (tarjeta + pie de área por lote, estilo CMET) =====
 let chartLotes = null, resumenView = 'pie';
+let resumenLotes = [], resumenTotal = 0, resumenSort = { col: 'area', dir: 'desc' };
+
+// Tabla de lotes ordenable: clic en encabezado ordena ASC/DESC por esa columna
+function renderResumenTable() {
+    const tableEl = document.getElementById('hcda-resumen-table');
+    if (!tableEl) return;
+    const { col, dir } = resumenSort, s = dir === 'asc' ? 1 : -1;
+    const loteNum = x => { const m = String(x.lote).match(/\d+/); return m ? +m[0] : NaN; };
+    const sorted = [...resumenLotes].sort((a, b) => {
+        if (col === 'lote') {
+            const na = loteNum(a), nb = loteNum(b);
+            if (!isNaN(na) && !isNaN(nb)) return (na - nb) * s;
+            return String(a.lote).localeCompare(String(b.lote)) * s;
+        }
+        return ((a.area_ha || 0) - (b.area_ha || 0)) * s;   // 'area' y '%' ordenan igual
+    });
+    const arrow = c => resumenSort.col === c ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
+    tableEl.innerHTML =
+        `<table><thead><tr>
+            <th data-col="lote" style="cursor:pointer">Lote${arrow('lote')}</th>
+            <th data-col="area" class="n" style="cursor:pointer">ha${arrow('area')}</th>
+            <th data-col="pct" class="n" style="cursor:pointer">%${arrow('pct')}</th>
+        </tr></thead><tbody>` +
+        sorted.map(x => `<tr><td>${x.lote}</td><td class="n">${x.area_ha.toFixed(2)}</td><td class="n">${(x.area_ha / resumenTotal * 100).toFixed(1)}</td></tr>`).join('') +
+        '</tbody></table>';
+    tableEl.querySelectorAll('th[data-col]').forEach(th => th.addEventListener('click', () => {
+        const c = th.dataset.col === 'pct' ? 'area' : th.dataset.col;   // % ordena por área
+        if (resumenSort.col === c) resumenSort.dir = resumenSort.dir === 'asc' ? 'desc' : 'asc';
+        else { resumenSort.col = c; resumenSort.dir = c === 'lote' ? 'asc' : 'desc'; }
+        renderResumenTable();
+    }));
+}
 const RES_PAL = ['#1B7A40','#2E9E57','#5FB87C','#8Fd0a3','#E32630','#f0883e','#F5C518','#3498db','#9b59b6','#16a085','#27ae60','#e67e22'];
 
 async function updateHaciendaResumen(matchName, h) {
@@ -1614,10 +1592,9 @@ async function updateHaciendaResumen(matchName, h) {
             ['Máx lote', mx.toFixed(2) + ' ha'],
             ['Sobrevuelos', (vuelos.size || 0) + (tipo !== '—' ? ' · ' + tipo : '')],
         ].map(([k, v]) => `<div class="hr-stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
-        // Tabla de lotes (lote · ha · %)
-        tableEl.innerHTML = '<table><thead><tr><th>Lote</th><th class="n">ha</th><th class="n">%</th></tr></thead><tbody>' +
-            lotes.map(x => `<tr><td>${x.lote}</td><td class="n">${x.area_ha.toFixed(2)}</td><td class="n">${(x.area_ha / total * 100).toFixed(1)}</td></tr>`).join('') +
-            '</tbody></table>';
+        // Tabla de lotes ordenable (lote · ha · %)
+        resumenLotes = lotes; resumenTotal = total;
+        renderResumenTable();
         renderResumenPie(lotes);
         setResumenView(resumenView);
     } catch (e) {
@@ -1832,29 +1809,6 @@ document.getElementById('ots-range')?.addEventListener('input', e => showOrtoDat
 // Selector de la pestaña Multitemporal (independiente del filtro global)
 document.getElementById('mt-hacienda')?.addEventListener('change', e => mtSelect(e.target.value));
 
-// Mini-mapa arrastrable (por su barra de título) para que no tape el contenido
-(function makeMinimapDraggable() {
-    const mm = document.getElementById('minimap');
-    const wrap = document.getElementById('map-wrap');
-    const handle = mm?.querySelector('.mini-title');
-    if (!mm || !wrap || !handle) return;
-    handle.style.cursor = 'move';
-    handle.title = 'Arrastra para mover el mini-mapa';
-    let drag = false, sx = 0, sy = 0, ox = 0, oy = 0;
-    const start = (cx, cy) => {
-        const r = mm.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
-        ox = r.left - wr.left; oy = r.top - wr.top;
-        mm.style.left = ox + 'px'; mm.style.top = oy + 'px'; mm.style.right = 'auto'; mm.style.bottom = 'auto';
-        sx = cx; sy = cy; drag = true;
-    };
-    const move = (cx, cy) => { if (!drag) return; mm.style.left = (ox + cx - sx) + 'px'; mm.style.top = (oy + cy - sy) + 'px'; };
-    handle.addEventListener('mousedown', e => { start(e.clientX, e.clientY); e.preventDefault(); });
-    window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
-    window.addEventListener('mouseup', () => drag = false);
-    handle.addEventListener('touchstart', e => { const t = e.touches[0]; start(t.clientX, t.clientY); }, { passive: true });
-    window.addEventListener('touchmove', e => { if (drag) { const t = e.touches[0]; move(t.clientX, t.clientY); } }, { passive: true });
-    window.addEventListener('touchend', () => drag = false);
-})();
 
 // --- GO ---
 map.on('load', loadAll);
